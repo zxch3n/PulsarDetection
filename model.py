@@ -18,7 +18,6 @@ normalizers = {'minmax': MinMaxScaler, 'standard': StandardScaler}
 
 
 class BaseModel(with_metaclass(ABCMeta, ClassifierMixin)):
-
     @abstractmethod
     def __init__(self, normalizer='minmax', imbalance_method=None):
         """
@@ -26,8 +25,10 @@ class BaseModel(with_metaclass(ABCMeta, ClassifierMixin)):
         :param normalizer:
         :param imbalance_method:
         """
-        if normalizer is not None:
+        if normalizer in normalizers:
             self.normalizer = normalizers[normalizer]()
+        else:
+            self.normalizer = None
         self.imbalance_method = imbalance_method
 
     @abstractmethod
@@ -120,11 +121,44 @@ class XGBoost(BaseModel):
 
 
 class DecisionTree(BaseModel):
-    pass
+    def __init__(self, balanced_learning=True, max_depth=None, ):
+        super(DecisionTree, self).__init__('', None)  # Decision Tree does not need normalization
+        if balanced_learning:
+            class_weight = 'balance'
+        else:
+            class_weight = None
+        self.tree = DecisionTreeClassifier(
+            class_weight=class_weight,
+            max_depth=max_depth,
+            min_samples_leaf=5,
+            random_state=123
+        )
+
+    def _predict(self, X):
+        pass
+
+    def _fit(self, X, y):
+        pass
 
 
 class SVM(BaseModel):
-    pass
+    def __init__(self, kernel='rbf', balanced_learning=True, normalizer='minmax'):
+        super(SVM, self).__init__(normalizer, None)
+        if balanced_learning:
+            class_weight = 'balanced'
+        else:
+            class_weight = None
+        self.svc = SVC(
+            class_weight=class_weight,
+            kernel=kernel,
+            random_state=123
+        )
+
+    def _predict(self, X):
+        return self.svc.predict(X)
+
+    def _fit(self, X, y):
+        self.svc.fit(X, y)
 
 
 
