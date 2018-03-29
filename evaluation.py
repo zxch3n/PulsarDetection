@@ -1,17 +1,26 @@
 import numpy as np
 import pandas as pd
-from sklearn.metrics import confusion_matrix, recall_score, precision_recall_curve, roc_auc_score
+from sklearn.metrics import confusion_matrix, precision_recall_curve, roc_auc_score, roc_curve, f1_score
+from sklearn.model_selection import cross_val_score
 
 
-def cross_validation(learner, X, y, ):
-    pass
+def cross_validation(learner, X, y, scoring='f1'):
+    """
+
+    :param learner:
+    :param X:
+    :param y:
+    :param scoring: {'f1', 'roc_auc'}
+    :return:
+    """
+    return cross_val_score(learner, X, y, cv=3, scoring=scoring, n_jobs=-1)
 
 
 def estimate(model, features_train, features_test, labels_train, labels_test):
     clf = model
-    clf.fit(features_train, labels_train.values.ravel())
-    pred = clf.predict(features_test)
-    return confusion_matrix(labels_test, pred)
+    clf._fit(features_train, labels_train.values.ravel())
+    pred = clf._predict(features_test)
+    return roc_auc_score(labels_test, pred), f1_score(y_true=labels_test, y_pred=pred)
 
     # print("the recall for this model is :", cnf_matrix[1, 1] / (cnf_matrix[1, 1] + cnf_matrix[1, 0]))
     # fig = plt.figure(figsize=(6, 3))  # to plot the graph

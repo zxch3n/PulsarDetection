@@ -1,3 +1,5 @@
 .ipynb_checkpoints/
 _doc/
+.idea/
+*__test__*
 
