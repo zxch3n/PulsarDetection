@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+from imblearn.over_sampling import SMOTE
+from sklearn.utils import shuffle
 import time
 import random
 
@@ -60,3 +62,37 @@ def balance_data_by_creating_classes(X, y):
     pass
 
 
+def upsampling(X, y, ratio=1.0, random_state=123):
+    pos_indexes = list(np.nonzero(y))
+    neg_indexes = list(np.nonzero(1 - y))
+    pos_num = len(pos_indexes)
+    target_num = int(0.5 + ratio * (len(y) - len(pos_indexes)))
+    assert pos_num < target_num
+    X_pos = X[pos_indexes]
+    X_pos = np.concatenate([X_pos for _ in range(target_num // len(pos_indexes))] + [X_pos[:target_num % pos_num]])
+    X_neg = X[neg_indexes]
+    X, y = np.concatenate([X_pos, X_neg]), np.array([1] * len(X_pos) + [0] * len(X_neg))
+    return shuffle(X, y, random_state=random_state)
+
+
+def downsampling(X, y, random_state=123, ratio=1.0):
+    """
+
+    :param X:
+    :param y:
+    :param random_state:
+    :param ratio: pos to neg ratio
+    :return:
+    """
+    random.seed(random_state)
+    neg_indexes = list(np.nonzero(1 - y))
+    pos_num = len(y) - len(neg_indexes)
+    assert pos_num < ratio * len(neg_indexes)
+    keep_indexes = random.choices(neg_indexes, k=int(pos_num / ratio))
+    indexes = np.concatenate([keep_indexes, np.nonzero(y)])
+    return X[indexes], y[indexes]
+
+
+def smote(X, y, random_state=123, ratio=1.0):
+    s = SMOTE(random_state=123, n_jobs=-1, ratio=ratio)
+    return s.fit_sample(X, y)

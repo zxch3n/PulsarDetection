@@ -59,18 +59,6 @@ class BaseModel(with_metaclass(ABCMeta, ClassifierMixin)):
     def _normalize_transform(self, X):
         return self.normalizer.transform(X)
 
-    def upsampling(self, X, y):
-        pass
-
-    def downsampling(self, X, y):
-        pass
-
-    def smote(self, X, y):
-        pass
-
-    def split_major_class(self, X, y):
-        pass
-
 
 class BaseEnsembleModel(with_metaclass(ABCMeta, BaseModel)):
     @abstractmethod
