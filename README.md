@@ -13,12 +13,15 @@ Using pip to install all the required packages
 ` pip install -r requirements.txt`
 
 If you did not install python, installing from 
-[Anaconda](https://conda.io/docs/download.html) is recommended.
+[Anaconda](https://conda.io/docs/download.html) is recommended. 
+This will make your life easier.
 
 
 ## Usage
 
+To load the .ipynb files
 
+> `jupyter notebook`
 
 
 

@@ -1,4 +1,5 @@
 import numpy as np
+import xgboost as xgb
 from abc import ABCMeta, abstractmethod
 from six import with_metaclass
 from preprocess import train_test_split
@@ -112,6 +113,7 @@ class LinearEnsemble(BaseEnsembleModel):
 class XGBoost(BaseModel):
     def __init__(self, normalizer='minmax'):
         super(XGBoost, self).__init__(normalizer)
+        self.xgb = xgb.XGBClassifier()
 
     def _predict(self, X):
         pass
