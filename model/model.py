@@ -1,4 +1,5 @@
 import numpy as np
+import random
 import xgboost as xgb
 from abc import ABCMeta, abstractmethod
 from six import with_metaclass
@@ -115,18 +116,23 @@ class VotingEnsemble(BaseEnsembleModel):
 
 
 class LinearEnsemble(BaseEnsembleModel):
-    def __init__(self, learners, validation_rate=0.4):
+    def __init__(self, learners, validation_rate=0.2, random_drop_rate=0.3):
         super(LinearEnsemble, self).__init__(learners)
         self.weights = np.ones(len(learners))
         self.learners = learners
         self.lr_learner = LinearRegression(normalize=True)
+        self.random_drop_rate = random_drop_rate
         self.validation_rate = validation_rate
         self._threshold = 0
 
     def _fit(self, X, y):
         X_train, X_val, y_train, y_val = train_test_split(X, y, random_state=123, test_size=self.validation_rate)
+        random.seed(123)
         for learner in self.learners:
-            learner.fit(X_train, y_train)
+            X_train_dropped, _, y_train_dropped, _ = train_test_split(X_train, y_train,
+                                                                      random_state=random.randint(0, 100000000),
+                                                                      test_size=self.random_drop_rate)
+            learner.fit(X_train_dropped, y_train_dropped)
         ys = self._raw_predict(X_val)
         self.lr_learner.fit(ys, y_val)
         self._set_threshold(y_val, self.lr_learner.predict(ys))
