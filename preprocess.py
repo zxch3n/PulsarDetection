@@ -6,8 +6,8 @@ import time
 import random
 
 
-def load_data():
-    df = pd.read_csv('./HTRU2/HTRU_2.csv', header=None)
+def load_data(path='./HTRU2/HTRU_2.csv'):
+    df = pd.read_csv(path, header=None)
 
     df['Class'] = df.pop(8)
     y = df['Class']
@@ -77,7 +77,7 @@ def downsampling(X, y, random_state=123, ratio=1.0):
     return shuffle(X, y)
 
 
-def get_smote(random_state=123, ratio=1.0, kind='regular'):
+def get_smote(random_state=123, kind='regular'):
     """
 
     :param random_state:
@@ -86,7 +86,7 @@ def get_smote(random_state=123, ratio=1.0, kind='regular'):
         ``'regular'``, ``'borderline1'``, ``'borderline2'``, ``'svm'``.
     :return:
     """
-    def smote(X, y):
+    def smote(X, y, ratio=1.0):
         s = SMOTE(random_state=random_state, n_jobs=-1, ratio=ratio, kind=kind)
         return s.fit_sample(X, y)
     return smote

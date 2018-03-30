@@ -2,8 +2,10 @@ import numpy as np
 import xgboost as xgb
 from abc import ABCMeta, abstractmethod
 from six import with_metaclass
+from sklearn.utils import shuffle
 import pandas as pd
 import sklearn
+from sklearn.cluster import KMeans, k_means
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import VotingClassifier
@@ -18,17 +20,17 @@ normalizers = {'minmax': MinMaxScaler, 'standard': StandardScaler}
 
 class BaseModel(with_metaclass(ABCMeta, ClassifierMixin)):
     @abstractmethod
-    def __init__(self, normalizer=None, imbalance_method=None):
+    def __init__(self, normalizer=None, sample_method=None):
         """
 
         :param normalizer:
-        :param imbalance_method:
+        :param sample_method:
         """
         if normalizer in normalizers:
             self.normalizer = normalizers[normalizer]()
         else:
             self.normalizer = None
-        self.sample_method = imbalance_method
+        self.sample_method = sample_method
 
     @abstractmethod
     def _predict(self, X):
@@ -235,6 +237,64 @@ class SVM(BaseModel):
         self.svc.fit(X, y)
 
 
+class MultiClassesLearner(BaseModel):
+    def __init__(self, binary_classifier, cls_params=None):
+        super(MultiClassesLearner, self).__init__(None, None)
+        if cls_params is None:
+            cls_params = {}
+        self.models = []
+        self.kmeans = None
+        self.cls_type = binary_classifier
+        self.cls_params = cls_params
+        self.n_clusters = 0
+
+    def _fit(self, X, y):
+        X_pos = X[y == 1]
+        X_neg = X[y == 0]
+        n_clusters = len(X_neg) // len(X_pos)
+        self.n_clusters = n_clusters
+        if n_clusters > 30:
+            raise ValueError(
+                "The neg to pos rate is too large, it will cause {} clusters, which is > 30".format(n_clusters)
+            )
+        self.kmeans = KMeans(n_clusters=n_clusters, random_state=123, n_jobs=-1)
+        self.kmeans.fit(X_neg)
+        Cls = self.cls_type
+        for i in range(n_clusters):
+            X_i_neg = X_neg[self.kmeans.labels_ == i]
+            cls = Cls(**self.cls_params)
+            X_i, y_i = np.concatenate([X_pos, X_i_neg]), np.array([1]*len(X_pos) + [0]*len(X_i_neg))
+            X_i, y_i = shuffle(X_i, y_i)
+            cls.fit(X_i, y_i)
+            self.models.append(cls)
+
+    def _predict_proba(self, X):
+        if len(self.models) == 0:
+            raise ValueError("Must fit before predict")
+        if self.kmeans is None:
+            raise ValueError("Must fit before predict")
+        cluster_indexes = self.kmeans.predict(X)
+        y = np.zeros(len(X))
+        for i in range(self.n_clusters):
+            model_input = X[cluster_indexes == i]
+            pred = self.models[i].predict_proba(model_input)
+            y[cluster_indexes == i] = pred
+        return y
+
+    def _predict(self, X):
+        if len(self.models) == 0:
+            raise ValueError("Must fit before predict")
+        if self.kmeans is None:
+            raise ValueError("Must fit before predict")
+        cluster_indexes = self.kmeans.predict(X)
+        y = np.zeros(len(X))
+        for i in range(self.n_clusters):
+            model_input = X[cluster_indexes == i]
+            pred = self.models[i].predict(model_input)
+            y[cluster_indexes == i] = pred
+        return y
+
+
 def _get_best_threshold(y_true, y_pred_prob):
     """
 
@@ -266,6 +326,6 @@ def _get_best_threshold(y_true, y_pred_prob):
 
 __all__ = [
     'BaseEnsembleModel', 'VotingEnsemble', 'XGBoost', 'LinearEnsemble',
-    'DecisionTree', 'LinearModel', 'BaseModel', 'SVM'
+    'DecisionTree', 'LinearModel', 'BaseModel', 'SVM', 'MultiClassesLearner'
 ]
 
