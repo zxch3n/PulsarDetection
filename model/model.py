@@ -262,9 +262,10 @@ class SVM(BaseModel):
 
 
 class KNN(BaseModel):
-    def __init__(self, sample_method=None):
+    def __init__(self, sample_method=None, n_neighbors=5):
         super(KNN, self).__init__(normalizer_name='standard', sample_method=sample_method)
-        self.ln = KNeighborsClassifier()
+        self.ln = KNeighborsClassifier(n_neighbors=n_neighbors)
+        self.n_neighbors = n_neighbors
 
     def _predict_proba(self, X):
         return self.ln.predict_proba(X)
@@ -277,13 +278,14 @@ class KNN(BaseModel):
 
 
 class MultiClassesLearner(BaseModel):
-    def __init__(self, binary_classifier, cls_params=None, sample_method=None):
+    def __init__(self, binary_classifier_name, cls_params=None, sample_method=None):
         super(MultiClassesLearner, self).__init__(None, sample_method=sample_method)
         if cls_params is None:
             cls_params = {}
         self.models = []
         self.kmeans = None
-        self.binary_classifier = binary_classifier
+        self.binary_classifier_name = binary_classifier_name
+        self.binary_classifier = eval(binary_classifier_name)
         self.cls_params = cls_params
         self.n_clusters = 0
 
@@ -316,9 +318,11 @@ class MultiClassesLearner(BaseModel):
         y = np.zeros(len(X))
         for i in range(self.n_clusters):
             model_input = X[cluster_indexes == i]
+            if len(model_input) == 0:
+                continue
             pred = self.models[i].predict_proba(model_input)
             y[cluster_indexes == i] = pred
-        return y
+        return np.array([1 - y, y]).T
 
     def _predict(self, X):
         if len(self.models) == 0:
@@ -329,6 +333,8 @@ class MultiClassesLearner(BaseModel):
         y = np.zeros(len(X))
         for i in range(self.n_clusters):
             model_input = X[cluster_indexes == i]
+            if len(model_input) == 0:
+                continue
             pred = self.models[i].predict(model_input)
             y[cluster_indexes == i] = pred
         return y
