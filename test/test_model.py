@@ -10,3 +10,7 @@ def test_multi_classes():
     m = model.MultiClassesLearner(model.DecisionTree, {'max_depth': 5})
     print(evaluation.estimate(m, X_train, X_test, y_train, y_test))
 
+
+def test_xgboost():
+    m = model.XGBoost(n_jobs=1)
+    evaluation.cross_validation(m, X, y, n_jobs=1)

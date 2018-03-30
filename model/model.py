@@ -2,9 +2,11 @@ import numpy as np
 import xgboost as xgb
 from abc import ABCMeta, abstractmethod
 from six import with_metaclass
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.utils import shuffle
 import pandas as pd
 import sklearn
+from sklearn.base import BaseEstimator
 from sklearn.cluster import KMeans, k_means
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import LinearRegression
@@ -18,16 +20,16 @@ from sklearn.base import ClassifierMixin
 normalizers = {'minmax': MinMaxScaler, 'standard': StandardScaler}
 
 
-class BaseModel(with_metaclass(ABCMeta, ClassifierMixin)):
+class BaseModel(with_metaclass(ABCMeta, ClassifierMixin, BaseEstimator)):
     @abstractmethod
-    def __init__(self, normalizer=None, sample_method=None):
+    def __init__(self, normalizer_name=None, sample_method=None):
         """
 
-        :param normalizer:
+        :param normalizer_name:
         :param sample_method:
         """
-        if normalizer in normalizers:
-            self.normalizer = normalizers[normalizer]()
+        if normalizer_name in normalizers:
+            self.normalizer = normalizers[normalizer_name]()
         else:
             self.normalizer = None
         self.sample_method = sample_method
@@ -45,6 +47,11 @@ class BaseModel(with_metaclass(ABCMeta, ClassifierMixin)):
         pass
 
     def fit(self, X, y):
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+        if isinstance(y, pd.DataFrame) or isinstance(y, pd.Series):
+            y = y.values
+
         if self.normalizer is not None:
             self._normalize_fit(X)
             X = self._normalize_transform(X)
@@ -142,10 +149,18 @@ class LinearEnsemble(BaseEnsembleModel):
 
 
 class XGBoost(BaseModel):
-    def __init__(self, balanced_learning=True, normalizer='minmax'):
-        super(XGBoost, self).__init__(normalizer)
-        self.xgb = xgb.XGBClassifier(n_jobs=-1)
-        self.balanced = balanced_learning
+    def __init__(self, balanced_learning=True, normalizer_name='minmax', n_estimators=200,
+                 max_depth=5, min_child_weight=5, n_jobs=1):
+        super(XGBoost, self).__init__(normalizer_name)
+        self.xgb = xgb.XGBClassifier(n_estimators=n_estimators, max_depth=max_depth,
+                                     min_child_weight=min_child_weight, n_jobs=n_jobs,
+                                     nthread=-1)
+        self.n_estimators = n_estimators
+        self.normalizer_name = normalizer_name
+        self.max_depth = max_depth
+        self.min_child_weight = min_child_weight
+        self.n_jobs = n_jobs
+        self.balanced_learning = balanced_learning
 
     def _predict(self, X):
         return self.xgb.predict(X)
@@ -157,7 +172,7 @@ class XGBoost(BaseModel):
     def _fit(self, X, y):
         pos_num = np.sum(y)
         neg_num = len(y) - pos_num
-        if self.balanced:
+        if self.balanced_learning:
             self.xgb.scale_pos_weight = neg_num / pos_num
         self.xgb.fit(X, y)
 
@@ -188,7 +203,7 @@ class DecisionTree(BaseModel):
 
 class LinearModel(BaseModel):
     def __init__(self, balanced_learning=True):
-        super(LinearModel, self).__init__(normalizer='')  # use built in normalizer
+        super(LinearModel, self).__init__(normalizer_name='')  # use built in normalizer
         self.lr = LinearRegression(normalize=True, n_jobs=-1)
         self._threshold = 0
         self.balanced = balanced_learning
@@ -214,8 +229,8 @@ class LinearModel(BaseModel):
 
 
 class SVM(BaseModel):
-    def __init__(self, kernel='rbf', balanced_learning=True, normalizer='minmax'):
-        super(SVM, self).__init__(normalizer, None)
+    def __init__(self, kernel='rbf', balanced_learning=True, normalizer_name='minmax'):
+        super(SVM, self).__init__(normalizer_name, None)
         if balanced_learning:
             class_weight = 'balanced'
         else:
@@ -235,6 +250,21 @@ class SVM(BaseModel):
 
     def _fit(self, X, y):
         self.svc.fit(X, y)
+
+
+class KNN(BaseModel):
+    def __init__(self):
+        super(KNN, self).__init__(normalizer_name='standard')
+        self.ln = KNeighborsClassifier()
+
+    def _predict_proba(self, X):
+        return self.ln.predict_proba(X)
+
+    def _predict(self, X):
+        return self.ln.predict(X)
+
+    def _fit(self, X, y):
+        self.ln.fit(X, y)
 
 
 class MultiClassesLearner(BaseModel):
@@ -326,6 +356,7 @@ def _get_best_threshold(y_true, y_pred_prob):
 
 __all__ = [
     'BaseEnsembleModel', 'VotingEnsemble', 'XGBoost', 'LinearEnsemble',
-    'DecisionTree', 'LinearModel', 'BaseModel', 'SVM', 'MultiClassesLearner'
+    'DecisionTree', 'LinearModel', 'BaseModel', 'SVM', 'MultiClassesLearner',
+    'KNN'
 ]
 
