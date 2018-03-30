@@ -25,6 +25,19 @@ def test_cross_validation():
             raise e
 
 
+def test_ensemble():
+    for md in [
+        model.LinearEnsemble([
+                model.LinearModel(),
+                model.LinearModel()]),
+    ]:
+        try:
+            evaluation.cross_validation(md, X, y, scoring='both', n_jobs=1, n_splits=2)
+        except Exception as e:
+            print(md.__class__)
+            raise e
+
+
 def test_estimate():
     for md in [
         model.SVM(),

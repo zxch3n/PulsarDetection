@@ -137,26 +137,29 @@ class LinearEnsemble(BaseEnsembleModel):
         :param X: the input X from outside
         :return: a concatenated matrix contains all the predictions from every sub-learner
         """
-        ys = np.array([ln.predict_proba(X) for ln in self.learners])
-        return ys.T
+        ys = np.array([ln.predict_proba(X)[:, 1] for ln in self.learners])
+        ys = ys.T
+        return ys
 
     def _predict(self, X):
         return np.asarray(self.lr_learner.predict(self._raw_predict(X)) > self._threshold, np.int8)
 
     def _predict_proba(self, X):
-        return self.lr_learner.predict(self._raw_predict(X))
+        y = self.lr_learner.predict(self._raw_predict(X))
+        return np.array([-y + 2*self._threshold, y]).T
 
     def _set_threshold(self, y_true, y_pred_prob):
         self._threshold = _get_best_threshold(y_true=y_true, y_pred_prob=y_pred_prob)
 
 
 class XGBoost(BaseModel):
-    def __init__(self, balanced_learning=True, normalizer_name='minmax', n_estimators=200,
-                 max_depth=5, min_child_weight=5, n_jobs=1, sample_method=None):
+    def __init__(self, balanced_learning=True, normalizer_name='minmax', n_estimators=300,
+                 max_depth=4, min_child_weight=3, n_jobs=-1, sample_method=None, learning_rate=0.01):
         super(XGBoost, self).__init__(normalizer_name, sample_method=sample_method)
         self.xgb = xgb.XGBClassifier(n_estimators=n_estimators, max_depth=max_depth,
                                      min_child_weight=min_child_weight, n_jobs=n_jobs,
-                                     nthread=-1)
+                                     nthread=-1, eval_metric='auc', seed=123,
+                                     learning_rate=learning_rate)
         self.n_estimators = n_estimators
         self.sample_method = sample_method
         self.normalizer_name = normalizer_name
@@ -164,6 +167,7 @@ class XGBoost(BaseModel):
         self.min_child_weight = min_child_weight
         self.n_jobs = n_jobs
         self.balanced_learning = balanced_learning
+        self.learning_rate = learning_rate
 
     def _predict(self, X):
         return self.xgb.predict(X)
