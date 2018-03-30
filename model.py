@@ -41,11 +41,15 @@ class BaseModel(with_metaclass(ABCMeta, ClassifierMixin)):
         pass
 
     def fit(self, X, y):
-        if self.imbalance_method is not None:
-            X, y = self.imbalance_method(X, y)
         if self.normalizer is not None:
             self._normalize_fit(X)
             X = self._normalize_transform(X)
+
+        # imbalance method may use KNN/SVM to generate data
+        # so it should be used after the normalization process
+        if self.imbalance_method is not None:
+            X, y = self.imbalance_method(X, y)
+
         self._fit(X, y)
 
     def predict(self, X):
@@ -64,8 +68,8 @@ class BaseModel(with_metaclass(ABCMeta, ClassifierMixin)):
 
 class BaseEnsembleModel(with_metaclass(ABCMeta, BaseModel)):
     @abstractmethod
-    def __init__(self, learners, normalizer='minmax'):
-        super(BaseEnsembleModel, self).__init__(normalizer)
+    def __init__(self, learners):
+        super(BaseEnsembleModel, self).__init__('')  # do not need normalization
         for learner in learners:
             assert isinstance(learner, BaseModel)
         self.learners = learners
@@ -88,7 +92,7 @@ class VotingEnsemble(BaseEnsembleModel):
 
 
 class LinearEnsemble(BaseEnsembleModel):
-    def __init__(self, learners, validation_rate=0.3):
+    def __init__(self, learners, validation_rate=0.4):
         super(LinearEnsemble, self).__init__(learners)
         self.weights = np.ones(len(learners))
         self.learners = learners
@@ -98,12 +102,18 @@ class LinearEnsemble(BaseEnsembleModel):
     def _fit(self, X, y):
         X_train, X_val, y_train, y_val = train_test_split(X, y, random_state=123, test_set_rate=self.validation_rate)
         for learner in self.learners:
-            learner._fit(X_train, y_train)
+            learner.fit(X_train, y_train)
         ys = self._raw_predict(X_val)
         self.lr_learner.fit(ys, y_val)
 
     def _raw_predict(self, X):
-        ys = np.concatenate([ln._predict(X) for ln in self.learners], axis=1)
+        """
+
+
+        :param X: the input X from outside
+        :return: a concatenated matrix contains all the predictions from every sub-learner
+        """
+        ys = np.concatenate([ln.predict(X) for ln in self.learners], axis=1)
         return ys
 
     def _predict(self, X):
@@ -111,20 +121,25 @@ class LinearEnsemble(BaseEnsembleModel):
 
 
 class XGBoost(BaseModel):
-    def __init__(self, normalizer='minmax'):
+    def __init__(self, balanced_learning=True, normalizer='minmax'):
         super(XGBoost, self).__init__(normalizer)
-        self.xgb = xgb.XGBClassifier()
+        self.xgb = xgb.XGBClassifier(n_jobs=-1)
+        self.balanced = balanced_learning
 
     def _predict(self, X):
-        pass
+        return self.xgb.predict(X)
 
     def _fit(self, X, y):
-        pass
+        pos_num = np.sum(y)
+        neg_num = len(y) - pos_num
+        if self.balanced:
+            self.xgb.scale_pos_weight = neg_num / pos_num
+        self.xgb.fit(X, y)
 
 
 class DecisionTree(BaseModel):
     def __init__(self, balanced_learning=True, max_depth=None, ):
-        super(DecisionTree, self).__init__('', None)  # Decision Tree does not need normalization
+        super(DecisionTree, self).__init__('', None)
         if balanced_learning:
             class_weight = 'balance'
         else:
@@ -137,10 +152,22 @@ class DecisionTree(BaseModel):
         )
 
     def _predict(self, X):
-        pass
+        return self.tree.predict(X)
 
     def _fit(self, X, y):
-        pass
+        self.tree.fit(X, y)
+
+
+class LinearModel(BaseModel):
+    def __init__(self):
+        super(LinearModel, self).__init__(normalizer='')  # use built in normalizer
+        self.lr = LinearRegression(normalize=True, n_jobs=-1)
+
+    def _predict(self, X):
+        return self.lr.predict(X)
+
+    def _fit(self, X, y):
+        self.lr.fit(X, y)
 
 
 class SVM(BaseModel):
