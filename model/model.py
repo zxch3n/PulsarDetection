@@ -288,6 +288,7 @@ class MultiClassesLearner(BaseModel):
         self.binary_classifier = eval(binary_classifier_name)
         self.cls_params = cls_params
         self.n_clusters = 0
+        self._threshold = 0
 
     def _fit(self, X, y):
         X_pos = X[y == 1]
@@ -309,35 +310,49 @@ class MultiClassesLearner(BaseModel):
             cls.fit(X_i, y_i)
             self.models.append(cls)
 
+        scores = self._predict_proba(X)
+        self._threshold = _get_best_threshold(y, scores[:, 1])
+
     def _predict_proba(self, X):
         if len(self.models) == 0:
             raise ValueError("Must fit before predict")
         if self.kmeans is None:
             raise ValueError("Must fit before predict")
-        cluster_indexes = self.kmeans.predict(X)
-        y = np.zeros(len(X))
-        for i in range(self.n_clusters):
-            model_input = X[cluster_indexes == i]
-            if len(model_input) == 0:
-                continue
-            pred = self.models[i].predict_proba(model_input)
-            y[cluster_indexes == i] = pred
-        return np.array([1 - y, y]).T
+
+        y = 0
+        for model in self.models:
+            y += model.predict_proba(X)
+        y /= len(self.models)
+        return y
+        # TWO DIFF WAY TO IMPLEMENT THIS
+        # cluster_indexes = self.kmeans.predict(X)
+        # y = np.zeros(len(X))
+        # for i in range(self.n_clusters):
+        #     model_input = X[cluster_indexes == i]
+        #     if len(model_input) == 0:
+        #         continue
+        #     pred = self.models[i].predict_proba(model_input)
+        #     y[cluster_indexes == i] = pred
+        # return np.array([1 - y, y]).T
 
     def _predict(self, X):
         if len(self.models) == 0:
             raise ValueError("Must fit before predict")
         if self.kmeans is None:
             raise ValueError("Must fit before predict")
-        cluster_indexes = self.kmeans.predict(X)
-        y = np.zeros(len(X))
-        for i in range(self.n_clusters):
-            model_input = X[cluster_indexes == i]
-            if len(model_input) == 0:
-                continue
-            pred = self.models[i].predict(model_input)
-            y[cluster_indexes == i] = pred
-        return y
+
+        scores = self._predict_proba(X)
+        return np.array((scores[:, 1] > self._threshold), dtype=np.int)
+        # TWO DIFF WAY TO IMPLEMENT THIS
+        # cluster_indexes = self.kmeans.predict(X)
+        # y = np.zeros(len(X))
+        # for i in range(self.n_clusters):
+        #     model_input = X[cluster_indexes == i]
+        #     if len(model_input) == 0:
+        #         continue
+        #     pred = self.models[i].predict(model_input)
+        #     y[cluster_indexes == i] = pred
+        # return y
 
 
 def _get_best_threshold(y_true, y_pred_prob):
