@@ -96,6 +96,8 @@ class BaseEnsembleModel(with_metaclass(ABCMeta, BaseModel)):
 class VotingEnsemble(BaseEnsembleModel):
     def __init__(self, learners, weights=None):
         super(VotingEnsemble, self).__init__(learners)
+        self.weights = weights
+        self.learners = learners
         self.classifier = VotingClassifier(
             estimators=[('{}_{}'.format(learner.__class__, i), learner) for i, learner in enumerate(learners)],
             voting='soft',
@@ -184,6 +186,8 @@ class DecisionTree(BaseModel):
             class_weight = 'balanced'
         else:
             class_weight = None
+        self.balanced_learning = balanced_learning
+        self.max_depth = max_depth
         self.tree = DecisionTreeClassifier(
             class_weight=class_weight,
             max_depth=max_depth,
@@ -206,13 +210,13 @@ class LinearModel(BaseModel):
         super(LinearModel, self).__init__(normalizer_name='')  # use built in normalizer
         self.lr = LinearRegression(normalize=True, n_jobs=-1)
         self._threshold = 0
-        self.balanced = balanced_learning
+        self.balanced_learning = balanced_learning
 
     def _predict(self, X):
         return np.asarray(self.lr.predict(X) > self._threshold, np.int8)
 
     def _fit(self, X, y):
-        if not self.balanced:
+        if not self.balanced_learning:
             self.lr.fit(X, y)
         else:
             pos_num = np.sum(y)
@@ -236,6 +240,8 @@ class SVM(BaseModel):
             class_weight = 'balanced'
         else:
             class_weight = None
+        self.balanced_learning = balanced_learning
+        self.normalizer_name = normalizer_name
         self.kernel = kernel
         self.svc = SVC(
             class_weight=class_weight,
@@ -276,7 +282,7 @@ class MultiClassesLearner(BaseModel):
             cls_params = {}
         self.models = []
         self.kmeans = None
-        self.cls_type = binary_classifier
+        self.binary_classifier = binary_classifier
         self.cls_params = cls_params
         self.n_clusters = 0
 
@@ -291,7 +297,7 @@ class MultiClassesLearner(BaseModel):
             )
         self.kmeans = KMeans(n_clusters=n_clusters, random_state=123, n_jobs=-1)
         self.kmeans.fit(X_neg)
-        Cls = self.cls_type
+        Cls = self.binary_classifier
         for i in range(n_clusters):
             X_i_neg = X_neg[self.kmeans.labels_ == i]
             cls = Cls(**self.cls_params)

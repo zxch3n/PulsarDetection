@@ -22,3 +22,5 @@ def test_logistic_regression():
     y = np.array(X.sum(axis=1) > 0, dtype=np.int8)
     scores = evaluation.cross_validation(m, X, y, n_jobs=1)
     assert np.all(scores > 0.9)
+
+

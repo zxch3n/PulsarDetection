@@ -14,13 +14,13 @@ def cross_validation(cls, X, y, scoring='f1', n_jobs=-1, n_splits=3):
     :param cls: the classifier, inhered from BaseModel
     :param X: input features
     :param y: input class
-    :param scoring: {'f1', 'roc_auc', 'recall', 'all'}
+    :param scoring: {'f1', 'roc_auc', 'both'}
     :param n_jobs: The
     :return: scores
     """
     cv = ShuffleSplit(n_splits=n_splits, test_size=0.3, random_state=0)
 
-    if scoring != 'all':
+    if scoring != 'both':
         return cross_val_score(cls, X, y, cv=cv, scoring=scoring, n_jobs=n_jobs)
 
     # This faster implementation is not allowed...
@@ -29,7 +29,7 @@ def cross_validation(cls, X, y, scoring='f1', n_jobs=-1, n_splits=3):
 
     # Thus I choose a stupid one
     output = {}
-    for scoring in ('f1', 'roc_auc', 'recall'):
+    for scoring in ('f1', 'roc_auc'):
         output[scoring] = cross_val_score(cls, X, y, cv=cv, scoring=scoring, n_jobs=n_jobs)
     return output
 
