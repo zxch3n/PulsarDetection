@@ -80,7 +80,30 @@ def downsampling(X, y, random_state=123, ratio=1.0):
     return shuffle(X, y)
 
 
-def get_smote(random_state=123, kind='regular'):
+# SMOTE
+
+
+def smote_regular(X, y, ratio=1.0):
+    s = SMOTE(random_state=123, n_jobs=-1, ratio=ratio, kind='regular')
+    return s.fit_sample(X, y)
+
+
+def smote_borderline1(X, y, ratio=1.0):
+    s = SMOTE(random_state=123, n_jobs=-1, ratio=ratio, kind='borderline1')
+    return s.fit_sample(X, y)
+
+
+def smote_borderline2(X, y, ratio=1.0):
+    s = SMOTE(random_state=123, n_jobs=-1, ratio=ratio, kind='borderline2')
+    return s.fit_sample(X, y)
+
+
+def smote_svm(X, y, ratio=1.0):
+    s = SMOTE(random_state=123, n_jobs=-1, ratio=ratio, kind='svm')
+    return s.fit_sample(X, y)
+
+
+def get_smote(kind='regular'):
     """
 
     :param random_state:
@@ -89,7 +112,10 @@ def get_smote(random_state=123, kind='regular'):
         ``'regular'``, ``'borderline1'``, ``'borderline2'``, ``'svm'``.
     :return:
     """
-    def smote(X, y, ratio=1.0):
-        s = SMOTE(random_state=random_state, n_jobs=-1, ratio=ratio, kind=kind)
-        return s.fit_sample(X, y)
-    return smote
+    dikt = {
+        'regular': smote_regular,
+        'borderline1': smote_borderline1,
+        'borderline2': smote_borderline2,
+        'svm': smote_svm
+    }
+    return dikt[kind]
