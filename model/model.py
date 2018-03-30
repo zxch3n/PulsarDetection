@@ -152,12 +152,13 @@ class LinearEnsemble(BaseEnsembleModel):
 
 class XGBoost(BaseModel):
     def __init__(self, balanced_learning=True, normalizer_name='minmax', n_estimators=200,
-                 max_depth=5, min_child_weight=5, n_jobs=1):
-        super(XGBoost, self).__init__(normalizer_name)
+                 max_depth=5, min_child_weight=5, n_jobs=1, sample_method=None):
+        super(XGBoost, self).__init__(normalizer_name, sample_method=sample_method)
         self.xgb = xgb.XGBClassifier(n_estimators=n_estimators, max_depth=max_depth,
                                      min_child_weight=min_child_weight, n_jobs=n_jobs,
                                      nthread=-1)
         self.n_estimators = n_estimators
+        self.sample_method = sample_method
         self.normalizer_name = normalizer_name
         self.max_depth = max_depth
         self.min_child_weight = min_child_weight
@@ -180,8 +181,8 @@ class XGBoost(BaseModel):
 
 
 class DecisionTree(BaseModel):
-    def __init__(self, balanced_learning=True, max_depth=None, ):
-        super(DecisionTree, self).__init__('', None)
+    def __init__(self, balanced_learning=True, max_depth=None, sample_method=None):
+        super(DecisionTree, self).__init__(normalizer_name='standard', sample_method=sample_method)
         if balanced_learning:
             class_weight = 'balanced'
         else:
@@ -206,8 +207,8 @@ class DecisionTree(BaseModel):
 
 
 class LinearModel(BaseModel):
-    def __init__(self, balanced_learning=True):
-        super(LinearModel, self).__init__(normalizer_name='')  # use built in normalizer
+    def __init__(self, balanced_learning=True, sample_method=None):
+        super(LinearModel, self).__init__(normalizer_name='', sample_method=sample_method)  # use built in normalizer
         self.lr = LinearRegression(normalize=True, n_jobs=-1)
         self._threshold = 0
         self.balanced_learning = balanced_learning
@@ -234,8 +235,8 @@ class LinearModel(BaseModel):
 
 
 class SVM(BaseModel):
-    def __init__(self, kernel='rbf', balanced_learning=True, normalizer_name='minmax'):
-        super(SVM, self).__init__(normalizer_name, None)
+    def __init__(self, kernel='rbf', balanced_learning=True, normalizer_name='minmax', sample_method=None):
+        super(SVM, self).__init__(normalizer_name, sample_method=sample_method)
         if balanced_learning:
             class_weight = 'balanced'
         else:
@@ -261,8 +262,8 @@ class SVM(BaseModel):
 
 
 class KNN(BaseModel):
-    def __init__(self):
-        super(KNN, self).__init__(normalizer_name='standard')
+    def __init__(self, sample_method=None):
+        super(KNN, self).__init__(normalizer_name='standard', sample_method=sample_method)
         self.ln = KNeighborsClassifier()
 
     def _predict_proba(self, X):
@@ -276,8 +277,8 @@ class KNN(BaseModel):
 
 
 class MultiClassesLearner(BaseModel):
-    def __init__(self, binary_classifier, cls_params=None):
-        super(MultiClassesLearner, self).__init__(None, None)
+    def __init__(self, binary_classifier, cls_params=None, sample_method=None):
+        super(MultiClassesLearner, self).__init__(None, sample_method=sample_method)
         if cls_params is None:
             cls_params = {}
         self.models = []
