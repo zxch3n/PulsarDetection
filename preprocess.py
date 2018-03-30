@@ -1,4 +1,5 @@
 import pandas as pd
+import os
 import numpy as np
 from imblearn.over_sampling import SMOTE
 from sklearn.utils import shuffle
@@ -7,8 +8,10 @@ import random
 
 
 def load_data(path='./HTRU2/HTRU_2.csv'):
-    df = pd.read_csv(path, header=None)
+    if not os.path.exists(path):
+        path = os.path.join('../', path)
 
+    df = pd.read_csv(path, header=None)
     df['Class'] = df.pop(8)
     y = df['Class']
     X = df.drop('Class', axis=1)

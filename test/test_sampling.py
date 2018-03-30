@@ -2,7 +2,7 @@ from preprocess import *
 from sklearn.model_selection import train_test_split
 import model
 import evaluation
-X, y = load_data('../HTRU2/HTRU_2.csv')
+X, y = load_data('./HTRU2/HTRU_2.csv')
 
 all_sample_methods = [
     upsampling,

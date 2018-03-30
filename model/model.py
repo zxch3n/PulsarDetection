@@ -167,7 +167,7 @@ class XGBoost(BaseModel):
 
     def _predict_proba(self, X):
         proba = self.xgb.predict_proba(X)
-        return proba[:, 1]
+        return proba
 
     def _fit(self, X, y):
         pos_num = np.sum(y)
@@ -195,7 +195,7 @@ class DecisionTree(BaseModel):
         return self.tree.predict(X)
 
     def _predict_proba(self, X):
-        return self.tree.predict_proba(X)[:, 1]
+        return self.tree.predict_proba(X)
 
     def _fit(self, X, y):
         self.tree.fit(X, y)
@@ -222,7 +222,8 @@ class LinearModel(BaseModel):
         self._set_threshold(y, self.lr.predict(X))
 
     def _predict_proba(self, X):
-        return self.lr.predict(X)
+        y = self.lr.predict(X)
+        return np.array([-y + 2*self._threshold, y]).T
 
     def _set_threshold(self, y_true, y_pred_prob):
         self._threshold = _get_best_threshold(y_true=y_true, y_pred_prob=y_pred_prob)
@@ -235,6 +236,7 @@ class SVM(BaseModel):
             class_weight = 'balanced'
         else:
             class_weight = None
+        self.kernel = kernel
         self.svc = SVC(
             class_weight=class_weight,
             kernel=kernel,
@@ -246,7 +248,7 @@ class SVM(BaseModel):
         return self.svc.predict(X)
 
     def _predict_proba(self, X):
-        return self.svc.predict_proba(X)[:, 1]
+        return self.svc.predict_proba(X)
 
     def _fit(self, X, y):
         self.svc.fit(X, y)
