@@ -28,7 +28,7 @@ class BaseModel(with_metaclass(ABCMeta, ClassifierMixin)):
             self.normalizer = normalizers[normalizer]()
         else:
             self.normalizer = None
-        self.imbalance_method = imbalance_method
+        self.sample_method = imbalance_method
 
     @abstractmethod
     def _predict(self, X):
@@ -49,8 +49,8 @@ class BaseModel(with_metaclass(ABCMeta, ClassifierMixin)):
 
         # imbalance method may use KNN/SVM to generate data
         # so it should be used after the normalization process
-        if self.imbalance_method is not None:
-            X, y = self.imbalance_method(X, y)
+        if self.sample_method is not None:
+            X, y = self.sample_method(X, y)
 
         self._fit(X, y)
 
@@ -63,7 +63,7 @@ class BaseModel(with_metaclass(ABCMeta, ClassifierMixin)):
         return self._predict_proba(X)
 
     def set_sample_method(self, method):
-        self.imbalance_method = method
+        self.sample_method = method
         return self
 
     def _normalize_fit(self, X):

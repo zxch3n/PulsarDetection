@@ -6,31 +6,13 @@ import time
 import random
 
 
-def normalize(X):
-    return X
+def load_data():
+    df = pd.read_csv('./HTRU2/HTRU_2.csv', header=None)
 
-
-def train_test_split(X, y, test_set_rate=0.3, random_state=123, slice_index=0):
-    """
-
-    TODO make sure to keep the same distribution
-
-    :param X:
-    :param y:
-    :param test_set_rate
-    :param random_state:
-        The random seed feed to the random method
-        If None, the random_state will be set to current time.
-    :param slice_index:
-        (int) Indicate which slice to pick.
-        slice_index < 1 / test_set_rate
-        It's useful when cross validating your model.
-    :return: X_train, X_test, y_train, y_test
-    """
-    if random_state is None:
-        random_state = int(time.time())
-    random.seed(random_state)
-    pass
+    df['Class'] = df.pop(8)
+    y = df['Class']
+    X = df.drop('Class', axis=1)
+    return X, y
 
 
 def make_data_balanced(X, y, method='SMOTE', pos_neg_rate=1):
@@ -63,14 +45,12 @@ def balance_data_by_creating_classes(X, y):
 
 
 def upsampling(X, y, ratio=1.0, random_state=123):
-    pos_indexes = list(np.nonzero(y))
-    neg_indexes = list(np.nonzero(1 - y))
-    pos_num = len(pos_indexes)
-    target_num = int(0.5 + ratio * (len(y) - len(pos_indexes)))
+    pos_num = sum(y)
+    target_num = int(0.5 + ratio * (len(y) - pos_num))
     assert pos_num < target_num
-    X_pos = X[pos_indexes]
-    X_pos = np.concatenate([X_pos for _ in range(target_num // len(pos_indexes))] + [X_pos[:target_num % pos_num]])
-    X_neg = X[neg_indexes]
+    X_pos = X[y == 1]
+    X_pos = np.concatenate([X_pos for _ in range(target_num // pos_num)] + [X_pos[:target_num % pos_num]])
+    X_neg = X[y == 0]
     X, y = np.concatenate([X_pos, X_neg]), np.array([1] * len(X_pos) + [0] * len(X_neg))
     return shuffle(X, y, random_state=random_state)
 
@@ -85,14 +65,28 @@ def downsampling(X, y, random_state=123, ratio=1.0):
     :return:
     """
     random.seed(random_state)
-    neg_indexes = list(np.nonzero(1 - y))
-    pos_num = len(y) - len(neg_indexes)
-    assert pos_num < ratio * len(neg_indexes)
-    keep_indexes = random.choices(neg_indexes, k=int(pos_num / ratio))
-    indexes = np.concatenate([keep_indexes, np.nonzero(y)])
-    return X[indexes], y[indexes]
+    pos_num = sum(y)
+    assert pos_num < ratio * (len(y) - pos_num)
+    if isinstance(X, pd.DataFrame):
+        X = X.values
+    X_neg = X[y == 0]
+    X_neg = X_neg[:int(pos_num / ratio)]
+    X_pos = X[y == 1]
+    X = np.concatenate([X_neg, X_pos])
+    y = np.array([0] * len(X_neg) + [1] * pos_num)
+    return shuffle(X, y)
 
 
-def smote(X, y, random_state=123, ratio=1.0):
-    s = SMOTE(random_state=123, n_jobs=-1, ratio=ratio)
-    return s.fit_sample(X, y)
+def get_smote(random_state=123, ratio=1.0, kind='regular'):
+    """
+
+    :param random_state:
+    :param ratio:
+    :param kind:
+        ``'regular'``, ``'borderline1'``, ``'borderline2'``, ``'svm'``.
+    :return:
+    """
+    def smote(X, y):
+        s = SMOTE(random_state=random_state, n_jobs=-1, ratio=ratio, kind=kind)
+        return s.fit_sample(X, y)
+    return smote

@@ -24,7 +24,7 @@ def estimate(cls, X_train, X_test, y_train, y_test):
     if not isinstance(cls, model.BaseModel):
         model.BaseModel.register(type(cls))
 
-    cls.fit(X_train, y_train.values.ravel())
+    cls.fit(X_train, y_train)
 
     y_score_test = cls.predict_proba(X_test)
     y_pred_test = cls.predict(X_test)
