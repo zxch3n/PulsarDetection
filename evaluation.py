@@ -19,11 +19,48 @@ def cross_validation(learner, X, y, scoring='f1'):
     return cross_val_score(learner, X, y, cv=3, scoring=scoring, n_jobs=-1)
 
 
-def estimate(model, features_train, features_test, labels_train, labels_test):
+def estimate(model, X_train, X_test, y_train, y_test):
     clf = model
-    clf._fit(features_train, labels_train.values.ravel())
-    pred = clf._predict(features_test)
-    return roc_auc_score(labels_test, pred), f1_score(y_true=labels_test, y_pred=pred)
+    clf.fit(X_train, y_train.values.ravel())
+    pred_score = clf.predict(X_test)
+    assert pred_score.dtype.kind == 'f' and np.not_equal(pred_score, pred_score.astype(int)), \
+        "Predict value should be float. Change the predict definition in {}".format(model.__class__)
+    y_pred = _score_to_pred(pred_score, y_train)
+    return roc_auc_score(y_test, pred_score), f1_score(y_true=y_test, y_pred=y_pred)
+
+
+def _score_to_pred(scores, y_train):
+    threshold = _get_best_threshold(scores, y_train)
+    return np.array([[1] if x > threshold else [0] for x in scores])
+
+
+def _get_best_threshold(scores, y_train):
+    """
+
+    :param scores:
+    :param y_train:
+    :return: threshold.
+        pred = 1, if score > threshold;
+        pred = 0, otherwise;
+    """
+    combined = [x for x in zip(scores, y_train)]
+    combined.sort(key=lambda x: x[0])
+    threshold = combined[0][0] - 0.1
+    pos_len = np.sum(y_train)
+    tp, fp, fn = pos_len, len(y_train) - pos_len, 0
+    f1 = tp / (fp + fn)
+
+    best_f1, best_threshold = f1, threshold
+    for threshold, y in combined:
+        if y == 1:
+            tp -= 1
+            fn += 1
+        else:
+            fp -= 1
+        f1 = tp / (fp + fn)
+        if f1 > best_f1:
+            best_f1, best_threshold = f1, threshold
+    return best_threshold
 
 
 def plot_confusion_matrix(y_pred, y_true):
