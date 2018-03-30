@@ -1,4 +1,5 @@
 import numpy as np
+import model
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -19,48 +20,37 @@ def cross_validation(learner, X, y, scoring='f1'):
     return cross_val_score(learner, X, y, cv=3, scoring=scoring, n_jobs=-1)
 
 
-def estimate(model, X_train, X_test, y_train, y_test):
-    clf = model
-    clf.fit(X_train, y_train.values.ravel())
-    pred_score = clf.predict(X_test)
-    assert pred_score.dtype.kind == 'f' and np.not_equal(pred_score, pred_score.astype(int)), \
-        "Predict value should be float. Change the predict definition in {}".format(model.__class__)
-    y_pred = _score_to_pred(pred_score, y_train)
-    return roc_auc_score(y_test, pred_score), f1_score(y_true=y_test, y_pred=y_pred)
+def estimate(cls, X_train, X_test, y_train, y_test):
+    if not isinstance(cls, model.BaseModel):
+        model.BaseModel.register(type(cls))
+
+    cls.fit(X_train, y_train.values.ravel())
+
+    y_score_test = cls.predict_proba(X_test)
+    y_pred_test = cls.predict(X_test)
+
+    y_score_train = cls.predict_proba(X_train)
+    y_pred_train = cls.predict(X_train)
+
+    assert y_score_test.dtype.kind == 'f',\
+        "Predict Proba value should be float. Change the predict definition in {}".format(cls.__class__)
+    assert np.all(np.equal(y_pred_test, y_pred_test.astype(int))), \
+        "Predict value should be int. Change the predict definition in {}".format(cls.__class__)
+
+    return {
+        'train': {
+            'roc_auc': roc_auc_score(y_true=y_train, y_score=y_score_train),
+            'f1': f1_score(y_true=y_train, y_pred=y_pred_train)
+        },
+        'test': {
+            'roc_auc': roc_auc_score(y_true=y_test, y_score=y_score_test),
+            'f1': f1_score(y_true=y_test, y_pred=y_pred_test)
+        }
+    }
 
 
-def _score_to_pred(scores, y_train):
-    threshold = _get_best_threshold(scores, y_train)
+def _score_to_pred(scores, threshold):
     return np.array([[1] if x > threshold else [0] for x in scores])
-
-
-def _get_best_threshold(scores, y_train):
-    """
-
-    :param scores:
-    :param y_train:
-    :return: threshold.
-        pred = 1, if score > threshold;
-        pred = 0, otherwise;
-    """
-    combined = [x for x in zip(scores, y_train)]
-    combined.sort(key=lambda x: x[0])
-    threshold = combined[0][0] - 0.1
-    pos_len = np.sum(y_train)
-    tp, fp, fn = pos_len, len(y_train) - pos_len, 0
-    f1 = tp / (fp + fn)
-
-    best_f1, best_threshold = f1, threshold
-    for threshold, y in combined:
-        if y == 1:
-            tp -= 1
-            fn += 1
-        else:
-            fp -= 1
-        f1 = tp / (fp + fn)
-        if f1 > best_f1:
-            best_f1, best_threshold = f1, threshold
-    return best_threshold
 
 
 def plot_confusion_matrix(y_pred, y_true):
