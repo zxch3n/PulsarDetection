@@ -26,7 +26,7 @@ def test_sampling_rate():
             raise e
         assert abs(sum(y_) - ratio*(len(y_) - sum(y_))) < 2
 
-    for ratio in (2, 4, 7):
+    for ratio in (0.15, 0.2, 0.4, 2, 4, 7):
         for i, sample_method in enumerate(all_sample_methods[:2]):
             try:
                 _, y_ = sample_method(X, y, ratio=ratio)

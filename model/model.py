@@ -23,7 +23,7 @@ normalizers = {'minmax': MinMaxScaler, 'standard': StandardScaler}
 
 class BaseModel(with_metaclass(ABCMeta, ClassifierMixin, BaseEstimator)):
     @abstractmethod
-    def __init__(self, normalizer_name=None, sample_method=None):
+    def __init__(self, normalizer_name=None, sample_method=None, sample_ratio=1.0):
         """
 
         :param normalizer_name:
@@ -35,6 +35,7 @@ class BaseModel(with_metaclass(ABCMeta, ClassifierMixin, BaseEstimator)):
             self.normalizer = None
         self.sample_method = sample_method
         self.normalizer_name = normalizer_name
+        self.sample_ratio = sample_ratio
 
     @abstractmethod
     def _predict(self, X):
@@ -71,10 +72,13 @@ class BaseModel(with_metaclass(ABCMeta, ClassifierMixin, BaseEstimator)):
         # imbalance method may use KNN/SVM to generate data
         # so it should be used after the normalization process
         if self.sample_method is not None:
-            X, y = self.sample_method(X, y)
+            X, y = self.sample_method(X, y, ratio=self.sample_ratio)
 
         self._fit(X, y)
         return self
+
+    def set_sample_ratio(self, ratio):
+        self.sample_ratio = ratio
 
     def predict(self, X):
         X = self._normalize_transform(X)
@@ -176,8 +180,9 @@ class XGBoost(BaseModel):
     def __init__(self, balanced_learning=True, normalizer_name='standard', n_estimators=300,
                  scale_pos_weight=1, max_depth=4, min_child_weight=3, n_jobs=-1,
                  sample_method=None, learning_rate=0.01, nthread=-1, subsample=0.8,
-                 silent=True, gamma=0.0, colsample_bytree=1, reg_alpha=0):
-        super(XGBoost, self).__init__(normalizer_name, sample_method=sample_method)
+                 silent=True, gamma=0.0, colsample_bytree=1, reg_alpha=0, sample_ratio=1):
+        super(XGBoost, self).__init__(normalizer_name, sample_method=sample_method,
+                                      sample_ratio=sample_ratio)
         self.xgb = xgb.XGBClassifier(n_estimators=n_estimators, max_depth=max_depth,
                                      min_child_weight=min_child_weight, n_jobs=n_jobs,
                                      nthread=nthread, eval_metric='auc', seed=123,
@@ -224,8 +229,11 @@ class XGBoost(BaseModel):
 
 class DecisionTree(BaseModel):
     def __init__(self, balanced_learning=True, max_depth=None, sample_method=None,
-                 min_samples_split=2, criterion='gini', splitter='best', normalizer_name='standard'):
-        super(DecisionTree, self).__init__(normalizer_name=normalizer_name, sample_method=sample_method)
+                 min_samples_split=2, criterion='gini', splitter='best',
+                 normalizer_name='standard', sample_ratio=1.0):
+        super(DecisionTree, self).__init__(normalizer_name=normalizer_name,
+                                           sample_method=sample_method,
+                                           sample_ratio=sample_ratio)
         if balanced_learning:
             class_weight = 'balanced'
         else:
@@ -261,8 +269,10 @@ class DecisionTree(BaseModel):
 
 class LinearModel(BaseModel):
     def __init__(self, balanced_learning=True, sample_method=None, C=1.0, penalty='l2', tol=1e-4,
-                 normalizer_name='standard'):
-        super(LinearModel, self).__init__(normalizer_name=normalizer_name, sample_method=sample_method)
+                 normalizer_name='standard', sample_ratio=1.0):
+        super(LinearModel, self).__init__(normalizer_name=normalizer_name,
+                                          sample_method=sample_method,
+                                          sample_ratio=sample_ratio)
         if balanced_learning:
             class_weight = 'balanced'
         else:
@@ -291,8 +301,8 @@ class LinearModel(BaseModel):
 
 class SVM(BaseModel):
     def __init__(self, kernel='rbf', balanced_learning=True, normalizer_name='standard',
-                 sample_method=None, C=1.0, gamma='auto'):
-        super(SVM, self).__init__(normalizer_name, sample_method=sample_method)
+                 sample_method=None, C=1.0, gamma='auto', sample_ratio=1.0):
+        super(SVM, self).__init__(normalizer_name, sample_method=sample_method, sample_ratio=sample_ratio)
         if balanced_learning:
             class_weight = 'balanced'
         else:
@@ -326,8 +336,10 @@ class SVM(BaseModel):
 
 
 class KNN(BaseModel):
-    def __init__(self, sample_method=None, n_neighbors=5, normalizer_name='standard'):
-        super(KNN, self).__init__(normalizer_name=normalizer_name, sample_method=sample_method)
+    def __init__(self, sample_method=None, n_neighbors=5,
+                 normalizer_name='standard', sample_ratio=1.0):
+        super(KNN, self).__init__(normalizer_name=normalizer_name, sample_method=sample_method,
+                                  sample_ratio=sample_ratio)
         self.ln = KNeighborsClassifier(n_neighbors=n_neighbors)
         self.n_neighbors = n_neighbors
 
@@ -347,7 +359,19 @@ class KNN(BaseModel):
 
 class MultiClassesLearner(BaseModel):
     def __init__(self, binary_classifier_name, cls_params=None, sample_method=None,
-                 normalizer_name='standard', balanced_learning=True):
+                 normalizer_name='standard', balanced_learning=True, implementation='vote'):
+        """
+
+        :param binary_classifier_name:
+        :param cls_params:
+        :param sample_method:
+        :param normalizer_name:
+        :param balanced_learning:
+        :param implementation: {'vote', 'linear_combined', 'cluster'}
+            'vote': mean(predict_proba)
+            'linear_combined': combine the result by logistic regression
+            'cluster': use the cluster-chosen classifier to predict
+        """
         super(MultiClassesLearner, self).__init__(normalizer_name=normalizer_name,
                                                   sample_method=sample_method)
         if cls_params is None:
@@ -360,6 +384,13 @@ class MultiClassesLearner(BaseModel):
         self.cls_params = cls_params
         self.n_clusters = 0
         self._threshold = 0
+        self.implementation = implementation
+
+        implementations = ('vote', 'linear_combined', 'cluster')
+        if implementation not in implementations:
+            raise ValueError("You must choose implementation from {}".format(implementation))
+        if implementation == 'linear_combined':
+            raise NotImplementedError()
 
     def _fit(self, X, y):
         X_pos = X[y == 1]
@@ -390,21 +421,23 @@ class MultiClassesLearner(BaseModel):
         if self.kmeans is None:
             raise ValueError("Must fit before predict")
 
-        y = 0
-        for model in self.models:
-            y += model.predict_proba(X)
-        y /= len(self.models)
-        return y
-        # TWO DIFF WAY TO IMPLEMENT THIS
-        # cluster_indexes = self.kmeans.predict(X)
-        # y = np.zeros(len(X))
-        # for i in range(self.n_clusters):
-        #     model_input = X[cluster_indexes == i]
-        #     if len(model_input) == 0:
-        #         continue
-        #     pred = self.models[i].predict_proba(model_input)
-        #     y[cluster_indexes == i] = pred
-        # return np.array([1 - y, y]).T
+        if self.implementation == 'vote':
+            y = 0
+            for model in self.models:
+                y += model.predict_proba(X)
+            y /= len(self.models)
+            return y
+
+        elif self.implementation == 'cluster':
+            cluster_indexes = self.kmeans.predict(X)
+            y = np.zeros(len(X))
+            for i in range(self.n_clusters):
+                model_input = X[cluster_indexes == i]
+                if len(model_input) == 0:
+                    continue
+                pred = self.models[i].predict_proba(model_input)
+                y[cluster_indexes == i] = pred
+            return np.array([1 - y, y]).T
 
     def _predict(self, X):
         if len(self.models) == 0:
@@ -412,18 +445,20 @@ class MultiClassesLearner(BaseModel):
         if self.kmeans is None:
             raise ValueError("Must fit before predict")
 
-        scores = self._predict_proba(X)
-        return np.array((scores[:, 1] > self._threshold), dtype=np.int)
-        # TWO DIFF WAY TO IMPLEMENT THIS
-        # cluster_indexes = self.kmeans.predict(X)
-        # y = np.zeros(len(X))
-        # for i in range(self.n_clusters):
-        #     model_input = X[cluster_indexes == i]
-        #     if len(model_input) == 0:
-        #         continue
-        #     pred = self.models[i].predict(model_input)
-        #     y[cluster_indexes == i] = pred
-        # return y
+        if self.implementation == 'vote':
+            scores = self._predict_proba(X)
+            return np.array((scores[:, 1] > self._threshold), dtype=np.int)
+
+        elif self.implementation == 'cluster':
+            cluster_indexes = self.kmeans.predict(X)
+            y = np.zeros(len(X))
+            for i in range(self.n_clusters):
+                model_input = X[cluster_indexes == i]
+                if len(model_input) == 0:
+                    continue
+                pred = self.models[i].predict(model_input)
+                y[cluster_indexes == i] = pred
+            return y
 
 
 def _get_best_threshold(y_true, y_pred_prob):

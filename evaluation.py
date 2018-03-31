@@ -130,10 +130,12 @@ def best_param_search(estimator, params, X, y, verbose=True, n_jobs=-1):
     :return:
         best_params: dict. {'C': 0.1, 'kernel': 'rbf', 'gamma': 0.1}
         df_scores: pd.DataFrame(index=params, columns=k_fold_score)
+        best_estimator_
     """
     best_params = {}
     df_scores = pd.DataFrame(columns=['test_score', 'train_score', 'fit_time', 'score_time'])
     _estimator = estimator
+    clf = None
     for ps in params:
         estimator = clone(_estimator)
         for name, value in best_params.items():
@@ -152,7 +154,7 @@ def best_param_search(estimator, params, X, y, verbose=True, n_jobs=-1):
                 clf.cv_results_['mean_fit_time'][i],
                 clf.cv_results_['mean_score_time'][i],
             ]
-    return best_params, df_scores
+    return best_params, df_scores, getattr(clf, 'best_estimator_', None)
 
 
 __all__ = ['cross_validation']
