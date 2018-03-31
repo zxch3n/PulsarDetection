@@ -50,9 +50,17 @@ class BaseModel(with_metaclass(ABCMeta, ClassifierMixin, BaseEstimator)):
         pass
 
     def set_params(self, **params):
-        super(BaseModel, self).set_params(**params)
+        try:
+            super(BaseModel, self).set_params(**params)
+        except ValueError as e:
+            pass
+
         if self._estimator is not None:
-            self._estimator.set_params(**params)
+            try:
+                self._estimator.set_params(**params)
+            except ValueError as e:
+                pass
+
         return self
 
     @property

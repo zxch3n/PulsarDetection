@@ -85,7 +85,7 @@ def score_transform(y_score):
 
 
 def plot_confusion_matrix(y_pred, y_true):
-    cnf_matrix = confusion_matrix(y_pred, y_true)
+    cnf_matrix = confusion_matrix(y_true=y_true, y_pred=y_pred)
     print("the recall for this model is :", cnf_matrix[1, 1] / (cnf_matrix[1, 1] + cnf_matrix[1, 0]))
     sns.heatmap(cnf_matrix, cmap="coolwarm_r", annot=True, linewidths=0.5)
     plt.title("Confusion_matrix")
@@ -132,6 +132,12 @@ def best_param_search(estimator, params, X, y, verbose=True, n_jobs=-1):
         df_scores: pd.DataFrame(index=params, columns=k_fold_score)
         best_estimator_
     """
+    all_available_params = estimator.get_params()
+    for ps in params:
+        for param in ps.keys():
+            if param not in all_available_params:
+                raise ValueError("{} is not a param in {} class".format(param, estimator.__class__))
+
     best_params = {}
     df_scores = pd.DataFrame(columns=['test_score', 'train_score', 'fit_time', 'score_time'])
     _estimator = estimator
@@ -139,7 +145,9 @@ def best_param_search(estimator, params, X, y, verbose=True, n_jobs=-1):
     for ps in params:
         estimator = clone(_estimator)
         for name, value in best_params.items():
-            ps[name] = [value]
+            if name not in ps:
+                ps[name] = [value]
+
         cv = ShuffleSplit(n_splits=3, test_size=0.3, random_state=0)
         clf = GridSearchCV(estimator, ps, scoring='f1', cv=cv, n_jobs=n_jobs, return_train_score=True)
         clf.fit(X, y)
