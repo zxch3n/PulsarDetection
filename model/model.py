@@ -34,6 +34,7 @@ class BaseModel(with_metaclass(ABCMeta, ClassifierMixin, BaseEstimator)):
         else:
             self.normalizer = None
         self.sample_method = sample_method
+        self.normalizer_name = normalizer_name
 
     @abstractmethod
     def _predict(self, X):
@@ -127,8 +128,8 @@ class VotingEnsemble(BaseEnsembleModel):
 
 
 class LinearEnsemble(BaseEnsembleModel):
-    def __init__(self, learners, validation_rate=0.2, random_drop_rate=0.3):
-        super(LinearEnsemble, self).__init__(learners)
+    def __init__(self, learners, validation_rate=0.2, normalizer_name=None, random_drop_rate=0.3):
+        super(LinearEnsemble, self).__init__(normalizer_name, learners)
         self.weights = np.ones(len(learners))
         self.learners = learners
         self.lr_learner = LinearModel()
@@ -170,7 +171,7 @@ class LinearEnsemble(BaseEnsembleModel):
 
 
 class XGBoost(BaseModel):
-    def __init__(self, balanced_learning=True, normalizer_name='minmax', n_estimators=300,
+    def __init__(self, balanced_learning=True, normalizer_name='standard', n_estimators=300,
                  scale_pos_weight=1, max_depth=4, min_child_weight=3, n_jobs=-1,
                  sample_method=None, learning_rate=0.01, nthread=-1, subsample=0.8,
                  silent=True, gamma=0.0, colsample_bytree=1, reg_alpha=0):
@@ -221,8 +222,8 @@ class XGBoost(BaseModel):
 
 class DecisionTree(BaseModel):
     def __init__(self, balanced_learning=True, max_depth=None, sample_method=None,
-                 min_samples_split=2, criterion='gini', splitter='best'):
-        super(DecisionTree, self).__init__(normalizer_name='standard', sample_method=sample_method)
+                 min_samples_split=2, criterion='gini', splitter='best', normalizer_name='standard'):
+        super(DecisionTree, self).__init__(normalizer_name=normalizer_name, sample_method=sample_method)
         if balanced_learning:
             class_weight = 'balanced'
         else:
@@ -257,8 +258,9 @@ class DecisionTree(BaseModel):
 
 
 class LinearModel(BaseModel):
-    def __init__(self, balanced_learning=True, sample_method=None, C=1.0, penalty='l2', tol=1e-4):
-        super(LinearModel, self).__init__(normalizer_name='standard', sample_method=sample_method)
+    def __init__(self, balanced_learning=True, sample_method=None, C=1.0, penalty='l2', tol=1e-4,
+                 normalizer_name='standard'):
+        super(LinearModel, self).__init__(normalizer_name=normalizer_name, sample_method=sample_method)
         if balanced_learning:
             class_weight = 'balanced'
         else:
@@ -286,7 +288,7 @@ class LinearModel(BaseModel):
 
 
 class SVM(BaseModel):
-    def __init__(self, kernel='rbf', balanced_learning=True, normalizer_name='minmax',
+    def __init__(self, kernel='rbf', balanced_learning=True, normalizer_name='standard',
                  sample_method=None, C=1.0, gamma='auto'):
         super(SVM, self).__init__(normalizer_name, sample_method=sample_method)
         if balanced_learning:
@@ -322,8 +324,8 @@ class SVM(BaseModel):
 
 
 class KNN(BaseModel):
-    def __init__(self, sample_method=None, n_neighbors=5):
-        super(KNN, self).__init__(normalizer_name='standard', sample_method=sample_method)
+    def __init__(self, sample_method=None, n_neighbors=5, normalizer_name='standard'):
+        super(KNN, self).__init__(normalizer_name=normalizer_name, sample_method=sample_method)
         self.ln = KNeighborsClassifier(n_neighbors=n_neighbors)
         self.n_neighbors = n_neighbors
 
@@ -342,12 +344,15 @@ class KNN(BaseModel):
 
 
 class MultiClassesLearner(BaseModel):
-    def __init__(self, binary_classifier_name, cls_params=None, sample_method=None):
-        super(MultiClassesLearner, self).__init__(None, sample_method=sample_method)
+    def __init__(self, binary_classifier_name, cls_params=None, sample_method=None,
+                 normalizer_name='standard', balanced_learning=True):
+        super(MultiClassesLearner, self).__init__(normalizer_name=normalizer_name,
+                                                  sample_method=sample_method)
         if cls_params is None:
             cls_params = {}
         self.models = []
         self.kmeans = None
+        self.balanced_learning = balanced_learning
         self.binary_classifier_name = binary_classifier_name
         self.binary_classifier = eval(binary_classifier_name)
         self.cls_params = cls_params
