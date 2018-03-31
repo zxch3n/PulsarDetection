@@ -65,3 +65,5 @@ def test_data_split_identical():
         b = evaluation.cross_validation(md, X_, y_, scoring='both', n_splits=2, n_jobs=1)
         assert np.all(a['f1'] == b['f1'])
         assert np.all(a['roc_auc'] == b['roc_auc'])
+
+

@@ -1,11 +1,13 @@
 import numpy as np
 import model
 import pandas as pd
+from sklearn.base import clone
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import confusion_matrix, precision_recall_curve, \
     roc_auc_score, roc_curve, f1_score, classification_report, recall_score
-from sklearn.model_selection import cross_val_score, ShuffleSplit
+from sklearn.model_selection import cross_val_score, ShuffleSplit, RandomizedSearchCV, \
+    GridSearchCV
 
 
 def cross_validation(cls, X, y, scoring='f1', n_jobs=-1, n_splits=3):
@@ -102,6 +104,55 @@ def _scoring_func(estimator, X, y):
         recall_score(y_true=y, y_pred=pred),
         roc_auc_score(y_true=y, y_score=score)
     ]
+
+
+def best_param_search(estimator, params, X, y, verbose=True, n_jobs=-1):
+    """
+    The automatic search method
+
+    :param estimator: the learner
+    :param params:
+        A list of param list. the search will start tuning from
+        the first 1.
+
+        For example:
+            [
+                {'C': [0.01, 0.1, 1], 'kernel':['rbf', 'poly']},
+                {'gamma': [0.01, 0.025, 0.05, 0.1, 0.2, 0.4, 0.8]}
+            ]
+        This method will grid search `C` and `kernel` params first,
+        by cross validation, using the default `gamma` value.
+        And then use the best `C` and `kernel` params to grid search
+        the best setting of `gamma`, so on and so forth.
+    :param X: features
+    :param y: labels
+    :param verbose: {True, False} whether print the info while tuning
+    :return:
+        best_params: dict. {'C': 0.1, 'kernel': 'rbf', 'gamma': 0.1}
+        df_scores: pd.DataFrame(index=params, columns=k_fold_score)
+    """
+    best_params = {}
+    df_scores = pd.DataFrame(columns=['test_score', 'train_score', 'fit_time', 'score_time'])
+    _estimator = estimator
+    for ps in params:
+        estimator = clone(_estimator)
+        for name, value in best_params.items():
+            ps[name] = [value]
+        cv = ShuffleSplit(n_splits=3, test_size=0.3, random_state=0)
+        clf = GridSearchCV(estimator, ps, scoring='f1', cv=cv, n_jobs=n_jobs, return_train_score=True)
+        clf.fit(X, y)
+        for name, value in clf.best_params_.items():
+            best_params[name] = value
+
+        for i, dikt in enumerate(clf.cv_results_['params']):
+            index_name = ';'.join(['{}:{}'.format(a, b) for a, b in dikt.items()])
+            df_scores.loc[index_name] = [
+                clf.cv_results_['mean_test_score'][i],
+                clf.cv_results_['mean_train_score'][i],
+                clf.cv_results_['mean_fit_time'][i],
+                clf.cv_results_['mean_score_time'][i],
+            ]
+    return best_params, df_scores
 
 
 __all__ = ['cross_validation']

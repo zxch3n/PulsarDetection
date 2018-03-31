@@ -160,20 +160,31 @@ class LinearEnsemble(BaseEnsembleModel):
 
 class XGBoost(BaseModel):
     def __init__(self, balanced_learning=True, normalizer_name='minmax', n_estimators=300,
-                 max_depth=4, min_child_weight=3, n_jobs=-1, sample_method=None, learning_rate=0.01):
+                 scale_pos_weight=1, max_depth=4, min_child_weight=3, n_jobs=-1,
+                 sample_method=None, learning_rate=0.01, nthread=-1, subsample=0.8,
+                 silent=True, gamma=0.0, colsample_bytree=1, reg_alpha=0):
         super(XGBoost, self).__init__(normalizer_name, sample_method=sample_method)
         self.xgb = xgb.XGBClassifier(n_estimators=n_estimators, max_depth=max_depth,
                                      min_child_weight=min_child_weight, n_jobs=n_jobs,
-                                     nthread=-1, eval_metric='auc', seed=123,
-                                     learning_rate=learning_rate)
+                                     nthread=nthread, eval_metric='auc', seed=123,
+                                     scale_pos_weight=scale_pos_weight, subsample=subsample,
+                                     learning_rate=learning_rate, silent=silent, gamma=gamma,
+                                     colsample_bytree=colsample_bytree, reg_alpha=reg_alpha)
         self.n_estimators = n_estimators
         self.sample_method = sample_method
+        self.reg_alpha = reg_alpha
+        self.colsample_bytree = colsample_bytree
+        self.gamma = gamma
         self.normalizer_name = normalizer_name
         self.max_depth = max_depth
+        self.silent= silent
         self.min_child_weight = min_child_weight
         self.n_jobs = n_jobs
+        self.nthread = nthread
         self.balanced_learning = balanced_learning
+        self.subsample = subsample
         self.learning_rate = learning_rate
+        self.scale_pos_weight = scale_pos_weight
 
     def _predict(self, X):
         return self.xgb.predict(X)
@@ -183,11 +194,14 @@ class XGBoost(BaseModel):
         return proba
 
     def _fit(self, X, y):
-        pos_num = np.sum(y)
-        neg_num = len(y) - pos_num
         if self.balanced_learning:
+            pos_num = np.sum(y)
+            neg_num = len(y) - pos_num
             self.xgb.scale_pos_weight = neg_num / pos_num
         self.xgb.fit(X, y)
+
+    def feature_importance(self):
+        return self.xgb.booster().get_fscore()
 
 
 class DecisionTree(BaseModel):
@@ -245,7 +259,8 @@ class LinearModel(BaseModel):
 
 
 class SVM(BaseModel):
-    def __init__(self, kernel='rbf', balanced_learning=True, normalizer_name='minmax', sample_method=None):
+    def __init__(self, kernel='rbf', balanced_learning=True, normalizer_name='minmax',
+                 sample_method=None, C=1.0, gamma='auto'):
         super(SVM, self).__init__(normalizer_name, sample_method=sample_method)
         if balanced_learning:
             class_weight = 'balanced'
@@ -254,11 +269,15 @@ class SVM(BaseModel):
         self.balanced_learning = balanced_learning
         self.normalizer_name = normalizer_name
         self.kernel = kernel
+        self.C = C
+        self.gamma = gamma
         self.svc = SVC(
             class_weight=class_weight,
             kernel=kernel,
             probability=True,
             random_state=123,
+            C=C,
+            gamma=gamma
         )
 
     def _predict(self, X):
