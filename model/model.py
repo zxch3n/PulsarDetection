@@ -10,7 +10,7 @@ import sklearn
 from sklearn.base import BaseEstimator
 from sklearn.cluster import KMeans, k_means
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import VotingClassifier
 from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split
@@ -47,6 +47,16 @@ class BaseModel(with_metaclass(ABCMeta, ClassifierMixin, BaseEstimator)):
     def _fit(self, X, y):
         pass
 
+    def set_params(self, **params):
+        super(BaseModel, self).set_params(**params)
+        if self._estimator is not None:
+            self._estimator.set_params(**params)
+        return self
+
+    @property
+    def _estimator(self):
+        return None
+
     def fit(self, X, y):
         if isinstance(X, pd.DataFrame):
             X = X.values
@@ -63,6 +73,7 @@ class BaseModel(with_metaclass(ABCMeta, ClassifierMixin, BaseEstimator)):
             X, y = self.sample_method(X, y)
 
         self._fit(X, y)
+        return self
 
     def predict(self, X):
         X = self._normalize_transform(X)
@@ -120,7 +131,7 @@ class LinearEnsemble(BaseEnsembleModel):
         super(LinearEnsemble, self).__init__(learners)
         self.weights = np.ones(len(learners))
         self.learners = learners
-        self.lr_learner = LinearRegression(normalize=True)
+        self.lr_learner = LinearModel()
         self.random_drop_rate = random_drop_rate
         self.validation_rate = validation_rate
         self._threshold = 0
@@ -201,11 +212,16 @@ class XGBoost(BaseModel):
         self.xgb.fit(X, y)
 
     def feature_importance(self):
-        return self.xgb.booster().get_fscore()
+        return self.xgb.get_booster().get_fscore()
+
+    @property
+    def _estimator(self):
+        return self.xgb
 
 
 class DecisionTree(BaseModel):
-    def __init__(self, balanced_learning=True, max_depth=None, sample_method=None):
+    def __init__(self, balanced_learning=True, max_depth=None, sample_method=None,
+                 min_samples_split=2, criterion='gini', splitter='best'):
         super(DecisionTree, self).__init__(normalizer_name='standard', sample_method=sample_method)
         if balanced_learning:
             class_weight = 'balanced'
@@ -213,9 +229,15 @@ class DecisionTree(BaseModel):
             class_weight = None
         self.balanced_learning = balanced_learning
         self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+        self.criterion = criterion
+        self.splitter = splitter
         self.tree = DecisionTreeClassifier(
+            criterion=criterion,
+            splitter=splitter,
             class_weight=class_weight,
             max_depth=max_depth,
+            min_samples_split=min_samples_split,
             min_samples_leaf=5,
             random_state=123
         )
@@ -229,33 +251,38 @@ class DecisionTree(BaseModel):
     def _fit(self, X, y):
         self.tree.fit(X, y)
 
+    @property
+    def _estimator(self):
+        return self.tree
+
 
 class LinearModel(BaseModel):
-    def __init__(self, balanced_learning=True, sample_method=None):
-        super(LinearModel, self).__init__(normalizer_name='', sample_method=sample_method)  # use built in normalizer
-        self.lr = LinearRegression(normalize=True, n_jobs=-1)
+    def __init__(self, balanced_learning=True, sample_method=None, C=1.0, penalty='l2', tol=1e-4):
+        super(LinearModel, self).__init__(normalizer_name='standard', sample_method=sample_method)
+        if balanced_learning:
+            class_weight = 'balanced'
+        else:
+            class_weight = None
+        self.lr = LogisticRegression(penalty=penalty, C=C, n_jobs=-1, random_state=123,
+                                     tol=tol, class_weight=class_weight)
         self._threshold = 0
+        self.tol = tol
+        self.C = C
+        self.penalty = penalty
         self.balanced_learning = balanced_learning
 
     def _predict(self, X):
         return np.asarray(self.lr.predict(X) > self._threshold, np.int8)
 
     def _fit(self, X, y):
-        if not self.balanced_learning:
-            self.lr.fit(X, y)
-        else:
-            pos_num = np.sum(y)
-            rate = (len(y) - pos_num) / pos_num
-            weights = y * rate + 1 - y
-            self.lr.fit(X, y, weights)
-        self._set_threshold(y, self.lr.predict(X))
+        self.lr.fit(X, y)
 
     def _predict_proba(self, X):
-        y = self.lr.predict(X)
-        return np.array([-y + 2*self._threshold, y]).T
+        return self.lr.predict_proba(X)
 
-    def _set_threshold(self, y_true, y_pred_prob):
-        self._threshold = _get_best_threshold(y_true=y_true, y_pred_prob=y_pred_prob)
+    @property
+    def _estimator(self):
+        return self.lr
 
 
 class SVM(BaseModel):
@@ -289,6 +316,10 @@ class SVM(BaseModel):
     def _fit(self, X, y):
         self.svc.fit(X, y)
 
+    @property
+    def _estimator(self):
+        return self.svc
+
 
 class KNN(BaseModel):
     def __init__(self, sample_method=None, n_neighbors=5):
@@ -304,6 +335,10 @@ class KNN(BaseModel):
 
     def _fit(self, X, y):
         self.ln.fit(X, y)
+
+    @property
+    def _estimator(self):
+        return self.ln
 
 
 class MultiClassesLearner(BaseModel):
