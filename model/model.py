@@ -100,7 +100,7 @@ class BaseModel(with_metaclass(ABCMeta, ClassifierMixin, BaseEstimator)):
 class BaseEnsembleModel(with_metaclass(ABCMeta, BaseModel)):
     @abstractmethod
     def __init__(self, learners):
-        super(BaseEnsembleModel, self).__init__('')  # do not need normalization
+        super(BaseEnsembleModel, self).__init__()  # do not need normalization
         for learner in learners:
             assert isinstance(learner, BaseModel)
         self.learners = learners
@@ -128,14 +128,14 @@ class VotingEnsemble(BaseEnsembleModel):
 
 
 class LinearEnsemble(BaseEnsembleModel):
-    def __init__(self, learners, validation_rate=0.2, normalizer_name=None, random_drop_rate=0.3):
-        super(LinearEnsemble, self).__init__(normalizer_name, learners)
+    def __init__(self, learners, validation_rate=0.2, random_drop_rate=0.3):
+        super(LinearEnsemble, self).__init__(learners)
         self.weights = np.ones(len(learners))
         self.learners = learners
         self.lr_learner = LinearModel()
         self.random_drop_rate = random_drop_rate
         self.validation_rate = validation_rate
-        self._threshold = 0
+        self.scaler = StandardScaler()
 
     def _fit(self, X, y):
         X_train, X_val, y_train, y_val = train_test_split(X, y, random_state=123, test_size=self.validation_rate)
@@ -146,8 +146,8 @@ class LinearEnsemble(BaseEnsembleModel):
                                                                       test_size=self.random_drop_rate)
             learner.fit(X_train_dropped, y_train_dropped)
         ys = self._raw_predict(X_val)
+        ys = self.scaler.fit_transform(ys)
         self.lr_learner.fit(ys, y_val)
-        self._set_threshold(y_val, self.lr_learner.predict(ys))
 
     def _raw_predict(self, X):
         """
@@ -160,14 +160,16 @@ class LinearEnsemble(BaseEnsembleModel):
         return ys
 
     def _predict(self, X):
-        return np.asarray(self.lr_learner.predict(self._raw_predict(X)) > self._threshold, np.int8)
+        ys = self._raw_predict(X)
+        ys = self.scaler.transform(ys)
+        return self.lr_learner.predict(ys)
 
     def _predict_proba(self, X):
-        y = self.lr_learner.predict(self._raw_predict(X))
-        return np.array([-y + 2*self._threshold, y]).T
+        return self.lr_learner.predict_proba(self._raw_predict(X))
 
-    def _set_threshold(self, y_true, y_pred_prob):
-        self._threshold = _get_best_threshold(y_true=y_true, y_pred_prob=y_pred_prob)
+    @property
+    def _estimator(self):
+        return self.lr_learner
 
 
 class XGBoost(BaseModel):
