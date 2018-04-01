@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import numpy as np
 from imblearn.over_sampling import SMOTE
+from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
 import time
 import random
@@ -16,6 +17,12 @@ def load_data(path='./HTRU2/HTRU_2.csv'):
     y = df['Class']
     X = df.drop('Class', axis=1)
     return X, y
+
+
+def load_train_test():
+    X, y = load_data()
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=123)
+    return X_train, X_test, y_train, y_test
 
 
 def make_data_balanced(X, y, method='SMOTE', pos_neg_rate=1):

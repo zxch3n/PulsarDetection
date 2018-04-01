@@ -10,6 +10,7 @@ import sklearn
 from sklearn.base import BaseEstimator
 from sklearn.cluster import KMeans, k_means
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.neural_network import MLPClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import VotingClassifier
 from sklearn.svm import SVC
@@ -19,6 +20,7 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.base import ClassifierMixin
 
 normalizers = {'minmax': MinMaxScaler, 'standard': StandardScaler}
+random.seed(100)
 
 
 class BaseModel(with_metaclass(ABCMeta, ClassifierMixin, BaseEstimator)):
@@ -119,10 +121,11 @@ class BaseEnsembleModel(with_metaclass(ABCMeta, BaseModel)):
 
 
 class VotingEnsemble(BaseEnsembleModel):
-    def __init__(self, learners, weights=None):
+    def __init__(self, learners, weights=None, random_drop_rate=0.5):
         super(VotingEnsemble, self).__init__(learners)
         self.weights = weights
         self.learners = learners
+        self.random_drop_rate = random_drop_rate
         self.classifier = VotingClassifier(
             estimators=[('{}_{}'.format(learner.__class__, i), learner) for i, learner in enumerate(learners)],
             voting='soft',
@@ -130,7 +133,8 @@ class VotingEnsemble(BaseEnsembleModel):
         )
 
     def _fit(self, X, y):
-        self.classifier.fit(X, y)
+        X_, _, y_, _ = train_test_split(X, y, test_size=self.random_drop_rate, random_state=random.randint(1, 100000))
+        self.classifier.fit(X_, y_)
 
     def _predict(self, X):
         return self.classifier.predict(X)
@@ -139,18 +143,22 @@ class VotingEnsemble(BaseEnsembleModel):
         return self.classifier.predict_proba(X)
 
 
-class LinearEnsemble(BaseEnsembleModel):
-    def __init__(self, learners, validation_rate=0.2, random_drop_rate=0.3):
-        super(LinearEnsemble, self).__init__(learners)
+class ProbaEnsemble(BaseEnsembleModel):
+    def __init__(self, learners, ensemble_model, validation_rate=0.2, random_drop_rate=0.3, reuse_val=False):
+        super(ProbaEnsemble, self).__init__(learners)
         self.weights = np.ones(len(learners))
         self.learners = learners
-        self.lr_learner = LinearModel()
+        self.lr_learner = ensemble_model
         self.random_drop_rate = random_drop_rate
         self.validation_rate = validation_rate
         self.scaler = StandardScaler()
+        self.reuse_val = reuse_val
 
     def _fit(self, X, y):
         X_train, X_val, y_train, y_val = train_test_split(X, y, random_state=123, test_size=self.validation_rate)
+        if self.reuse_val:
+            X_train, y_train = X, y
+
         random.seed(123)
         for learner in self.learners:
             X_train_dropped, _, y_train_dropped, _ = train_test_split(X_train, y_train,
@@ -182,6 +190,28 @@ class LinearEnsemble(BaseEnsembleModel):
     @property
     def _estimator(self):
         return self.lr_learner
+
+
+class LinearEnsemble(ProbaEnsemble):
+    def __init__(self, learners, validation_rate=0.2, random_drop_rate=0.3, reuse_val=False):
+        super(LinearEnsemble, self).__init__(learners, LinearModel(), validation_rate,
+                                             random_drop_rate, reuse_val=reuse_val)
+
+
+class MLPEnsemble(ProbaEnsemble):
+    def __init__(self, learners, layers, activation='relu', validation_rate=0.5,
+                 random_drop_rate=0.5, reuse_val=False):
+        _layers = []
+        for n in layers:
+            if n == 0:
+                break
+            _layers.append(n)
+        md = MLPClassifier(hidden_layer_sizes=_layers, random_state=123, activation=activation)
+        super(MLPEnsemble, self).__init__(learners, md, validation_rate,
+                                          random_drop_rate, reuse_val=reuse_val)
+
+        self.layers = _layers
+        self.activation = activation
 
 
 class XGBoost(BaseModel):
@@ -501,6 +531,6 @@ def _get_best_threshold(y_true, y_pred_prob):
 __all__ = [
     'BaseEnsembleModel', 'VotingEnsemble', 'XGBoost', 'LinearEnsemble',
     'DecisionTree', 'LinearModel', 'BaseModel', 'SVM', 'MultiClassesLearner',
-    'KNN'
+    'KNN', 'ProbaEnsemble', 'MLPEnsemble'
 ]
 
