@@ -120,6 +120,73 @@ class BaseEnsembleModel(with_metaclass(ABCMeta, BaseModel)):
         self.learners = learners
 
 
+class StackedEnsembleModel(BaseEnsembleModel):
+    def __init__(self, learners, next_model, min_recall=0.95):
+        super(StackedEnsembleModel, self).__init__(learners)
+        self.thresholds = []
+        self.min_recall = 0.95
+        self.next_model = next_model
+        self.filter_rate_ = {'predict': [], 'fit': []}
+    
+    def _fit(self, X, y):
+        random.seed(888)
+        for i, cls in enumerate(self.learners):
+            X_train, X_val, y_train, y_val = train_test_split(X, y, random_state=random.randint(1, 99999))
+            cls.fit(X_train, y_train)
+            pred = cls.predict_proba(X_val)
+            self.thresholds[i] = self._find_threshold(y_val, pred)
+            pred = cls.predict_proba(X)
+            index = pred >= thresholds[i]
+            X, y = X[index], y[index]
+        self.next_model.fit(X, y)
+
+    def _find_threshold(self, y_true, y_pred):
+        f1_threshold = _get_best_threshold(y_true, y_pred)        
+        recall_threshold = self._find_min_recall_threshold(y_true, y_pred)
+        if recall_threshold > f1_threshold:
+            # additional removals are not needed 
+            return f1_threshold
+        return recall_threshold
+    
+    def _find_min_recall_threshold(self, y_true, y_pred):
+        combined = [x for x in zip(y_pred, y_true)]
+        combined.sort(key=lambda x: x[0])
+        pre = combined[0][0] - 0.1
+        pos_len = np.sum(y_true)
+        tp, fp, fn = pos_len, len(y_true) - pos_len, 0
+        for threshold, y in combined:
+            if y == 1:
+                tp -= 1
+                fn += 1
+            else:
+                fp -= 1
+            recall = tp / (tp + fn)
+            if recall < self.min_recall:
+                return pre
+            pre = threshold
+        return threshold
+
+    def _predict(self, X):
+        index = np.array(True, size=len(X))
+        for i, cls in enumerate(self.learners):
+            pred = cls.predict_proba(_X)
+            index[pred < self.thresholds[i]] = False
+        y = np.array(0, size=len(X))
+        y[index] = self.next_model.predict(X[index])
+        self.filter_rate_['predict'].append(np.mean(index))
+        return y
+
+    def _predict_proba(self, X):
+        index = np.array(True, size=len(X))
+        for i, cls in enumerate(self.learners):
+            pred = cls.predict_proba(_X)
+            index[pred < self.thresholds[i]] = False
+        y = np.array(0, size=len(X))
+        y[index] = self.next_model.predict_proba(X[index])
+        self.filter_rate_['predict'].append(np.mean(index))
+        return y
+
+
 class VotingEnsemble(BaseEnsembleModel):
     def __init__(self, learners, weights=None, random_drop_rate=0.5):
         super(VotingEnsemble, self).__init__(learners)
