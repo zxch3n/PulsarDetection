@@ -6,4 +6,4 @@ seaborn==0.8.1
 imbalanced_learn==0.3.3
 imblearn==0.0
 scikit_learn==0.19.1
-xgboost==0.7.post4
+xgboost

@@ -121,17 +121,17 @@ class BaseEnsembleModel(with_metaclass(ABCMeta, BaseModel)):
 
 
 class StackedEnsembleModel(BaseEnsembleModel):
-    def __init__(self, learners, next_model, min_recall=0.95, min_neg_precision=None):
+    def __init__(self, learners, next_model, min_recall=0.95, min_neg_recall=None):
         super(StackedEnsembleModel, self).__init__(learners)
         self.recall_thresholds = [0] * len(learners)
-        if min_neg_precision is not None:
+        if min_neg_recall is not None:
             self.neg_recall_thresholds = [0] * len(learners)
         else:
             self.neg_recall_thresholds = None
         self.min_recall = min_recall
         self.next_model = next_model
         self.filter_rate_ = {'predict': [], 'fit': []}
-        self.min_neg_precision = min_neg_precision
+        self.min_neg_recall = min_neg_recall
 
     def _fit(self, X, y):
         random.seed(888)
@@ -140,7 +140,7 @@ class StackedEnsembleModel(BaseEnsembleModel):
             cls.fit(X_train, y_train)
             pred = cls.predict_proba(X_val)
             self.recall_thresholds[i] = self._find_recall_threshold(y_val, pred[:, 1])
-            if self.min_neg_precision is not None:
+            if self.min_neg_recall is not None:
                 self.neg_recall_thresholds[i] = self._find_neg_recall_threshold(y_val, pred[:, 1])
             pred = cls.predict_proba(X)
             index = pred[:, 1] >= self.recall_thresholds[i]
@@ -197,11 +197,12 @@ class StackedEnsembleModel(BaseEnsembleModel):
         for i, cls in enumerate(self.learners):
             pred = cls.predict_proba(X)
             index[pred[:, 1] < self.recall_thresholds[i]] = False
-            if self.min_neg_precision:
+            if self.min_neg_recall:
                 true_index[pred[:, 1] > self.neg_recall_thresholds[i]] = True
 
         if is_proba:
-            y = np.zeros(shape=len(X), dtype=np.float32)
+            y = np.zeros(shape=(len(X), 2), dtype=np.float32)
+            y[:, 0] = 1
             y[index] = self.next_model.predict_proba(X[index])
         else:
             y = np.zeros(shape=len(X), dtype=np.int8)
