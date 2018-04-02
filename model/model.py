@@ -121,12 +121,17 @@ class BaseEnsembleModel(with_metaclass(ABCMeta, BaseModel)):
 
 
 class StackedEnsembleModel(BaseEnsembleModel):
-    def __init__(self, learners, next_model, min_recall=0.95):
+    def __init__(self, learners, next_model, min_recall=0.95, min_neg_precision=None):
         super(StackedEnsembleModel, self).__init__(learners)
-        self.thresholds = []
+        self.recall_thresholds = [0] * len(learners)
+        if min_neg_precision is not None:
+            self.neg_recall_thresholds = [0] * len(learners)
+        else:
+            self.neg_recall_thresholds = None
         self.min_recall = min_recall
         self.next_model = next_model
         self.filter_rate_ = {'predict': [], 'fit': []}
+        self.min_neg_precision = min_neg_precision
 
     def _fit(self, X, y):
         random.seed(888)
@@ -134,20 +139,33 @@ class StackedEnsembleModel(BaseEnsembleModel):
             X_train, X_val, y_train, y_val = train_test_split(X, y, random_state=random.randint(1, 99999))
             cls.fit(X_train, y_train)
             pred = cls.predict_proba(X_val)
-            self.thresholds[i] = self._find_threshold(y_val, pred)
+            self.recall_thresholds[i] = self._find_recall_threshold(y_val, pred[:, 1])
+            if self.min_neg_precision is not None:
+                self.neg_recall_thresholds[i] = self._find_neg_recall_threshold(y_val, pred[:, 1])
             pred = cls.predict_proba(X)
-            index = pred >= self.thresholds[i]
+            index = pred[:, 1] >= self.recall_thresholds[i]
             X, y = X[index], y[index]
         self.next_model.fit(X, y)
 
-    def _find_threshold(self, y_true, y_pred):
+    def _find_neg_recall_threshold(self, y_true, y_pred):
+        f1_threshold = _get_best_threshold(y_true, y_pred)
+        precision_threshold = self._find_min_neg_recall_threshold(y_true, y_pred)
+        if precision_threshold < f1_threshold:
+            # additional removals are not needed
+            return f1_threshold
+        return precision_threshold
+
+    def _find_recall_threshold(self, y_true, y_pred):
         f1_threshold = _get_best_threshold(y_true, y_pred)        
         recall_threshold = self._find_min_recall_threshold(y_true, y_pred)
         if recall_threshold > f1_threshold:
             # additional removals are not needed 
             return f1_threshold
         return recall_threshold
-    
+
+    def _find_min_neg_recall_threshold(self, y_true, y_pred):
+        return - self._find_min_recall_threshold(1-y_true, -y_pred)
+
     def _find_min_recall_threshold(self, y_true, y_pred):
         combined = [x for x in zip(y_pred, y_true)]
         combined.sort(key=lambda x: x[0])
@@ -168,23 +186,29 @@ class StackedEnsembleModel(BaseEnsembleModel):
         return threshold
 
     def _predict(self, X):
-        index = np.ones(shape=len(X), dtype=np.bool)
-        for i, cls in enumerate(self.learners):
-            pred = cls.predict_proba(X)
-            index[pred < self.thresholds[i]] = False
-        y = np.zeros(shape=len(X), dtype=np.bool)
-        y[index] = self.next_model.predict(X[index])
-        self.filter_rate_['predict'].append(np.mean(index))
-        return y
+        return self._pred(X, is_proba=False)
 
     def _predict_proba(self, X):
+        return self._pred(X, is_proba=True)
+
+    def _pred(self, X, is_proba):
         index = np.ones(shape=len(X), dtype=np.bool)
+        true_index = np.zeros(shape=len(X), dtype=np.bool)
         for i, cls in enumerate(self.learners):
             pred = cls.predict_proba(X)
-            index[pred < self.thresholds[i]] = False
-        y = np.zeros(shape=len(X), dtype=np.bool)
-        y[index] = self.next_model.predict_proba(X[index])
-        self.filter_rate_['predict'].append(np.mean(index))
+            index[pred[:, 1] < self.recall_thresholds[i]] = False
+            if self.min_neg_precision:
+                true_index[pred[:, 1] > self.neg_recall_thresholds[i]] = True
+
+        if is_proba:
+            y = np.zeros(shape=len(X), dtype=np.float32)
+            y[index] = self.next_model.predict_proba(X[index])
+        else:
+            y = np.zeros(shape=len(X), dtype=np.int8)
+            y[index] = self.next_model.predict(X[index])
+
+        y[true_index] = 1
+        self.filter_rate_['predict'].append(1 - np.mean(index) + true_index.mean())
         return y
 
 
@@ -599,6 +623,6 @@ def _get_best_threshold(y_true, y_pred_prob):
 __all__ = [
     'BaseEnsembleModel', 'VotingEnsemble', 'XGBoost', 'LinearEnsemble',
     'DecisionTree', 'LinearModel', 'BaseModel', 'SVM', 'MultiClassesLearner',
-    'KNN', 'ProbaEnsemble', 'MLPEnsemble'
+    'KNN', 'ProbaEnsemble', 'MLPEnsemble', 'StackedEnsembleModel'
 ]
 

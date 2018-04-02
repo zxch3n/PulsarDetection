@@ -57,7 +57,8 @@ def balance_data_by_creating_classes(X, y):
 def upsampling(X, y, ratio=1.0, random_state=123):
     pos_num = sum(y)
     target_num = int(0.5 + ratio * (len(y) - pos_num))
-    assert pos_num < target_num
+    if not pos_num < target_num:
+        return X, y
     X_pos = X[y == 1]
     X_pos = np.concatenate([X_pos for _ in range(target_num // pos_num)] + [X_pos[:target_num % pos_num]])
     X_neg = X[y == 0]
@@ -76,7 +77,8 @@ def downsampling(X, y, random_state=123, ratio=1.0):
     """
     random.seed(random_state)
     pos_num = sum(y)
-    assert pos_num < ratio * (len(y) - pos_num)
+    if not pos_num < ratio * (len(y) - pos_num):
+        return X, y
     if isinstance(X, pd.DataFrame):
         X = X.values
     X_neg = X[y == 0]
