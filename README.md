@@ -1,8 +1,8 @@
-# TASK 1
+# [HTRU2](https://archive.ics.uci.edu/ml/datasets/HTRU2)
 
-This project is to solve the problem of 
+The goal of this repo is to solve the pulsar detect problem in HTRU_2 data set.
 
-More details are in the report.md.
+Please read report.md to see the result.
 
 ## Environment
 
@@ -19,9 +19,11 @@ This will make your life easier.
 
 ## Usage
 
-To load the .ipynb files
+To load the .ipynb files after install jupyter
 
 > `jupyter notebook`
+
+
 
 
 
