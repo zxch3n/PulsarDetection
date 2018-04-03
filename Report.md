@@ -90,7 +90,7 @@
 下图更清晰地描述了整体数据流。
 
 
-![Alt text](./img/data flow.png)
+![Alt text](./img/data_flow.png)
 
 2. 在预测时使用所有的分类器进行预测，将预测分数值累加
 
@@ -404,9 +404,9 @@ Stacked Ensemble具体的方式为我先使用若干个简单的分类器，在�
 
 我尝试了多种模型的组合，效果见下图
 
-![Alt text](./img/Decision Tree with 3 LR to filter.png)
-![Alt text](./img/SVM with 3 LR to filter.png)
-![Alt text](./img/XGBoost with 3 LR to filter.png)
+![Alt text](./img/DecisionTreewith3LRtofilter.png)
+![Alt text](./img/SVMwith3LRtofilter.png)
+![Alt text](./img/XGBoostwith3LRtofilter.png)
 
 
 - 过滤器能够过滤掉67%的样本（之所以每一次过滤掉的比例都完全一致是因为为了保证每次运行输出结果一致，实现中所有的random\_state, random\_seed都被设定为固定值）
